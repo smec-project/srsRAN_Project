@@ -8,15 +8,12 @@
 cell_cfg:
   pusch:
     min_k2: 4
-  tdd_ul_dl_cfg:
-    dl_ul_tx_period: 4
-    nof_dl_slots: 2
-    nof_dl_symbols: 10
-    nof_ul_slots: 1
-    nof_ul_symbols: 0
   pucch:
-    sr_period_ms: 2
+    sr_period_ms: 5
     min_k1: 4
   mac_cell_group:
     bsr_cfg:
-      periodic_bsr_timer: 1
+      periodic_bsr_timer: 5
+      retx_bsr_timer: 10
+  # srs:
+  #   srs_period_ms: 2.5

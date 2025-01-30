@@ -17,7 +17,7 @@ cu_cp:
 ru_sdr:
   device_driver: uhd
   device_args: type=b200,num_recv_frames=64,num_send_frames=64
-  srate: 23.04
+  srate: 46.08
   otw_format: sc12
   tx_gain: 80
   rx_gain: 40
@@ -25,7 +25,7 @@ ru_sdr:
 cell_cfg:
   dl_arfcn: 632628
   band: 78
-  channel_bandwidth_MHz: 20
+  channel_bandwidth_MHz: 40
   common_scs: 30
   plmn: 00101
   tac: 7

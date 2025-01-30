@@ -3,5 +3,10 @@
 cell_cfg:
   pdsch:
     mcs_table: qam256
+  pusch:
+    max_ue_mcs: 28
+    # olla_target_bler: 0.01
+    # olla_max_snr_offset: 20
+    # mcs_table: qam256
   ssb:
     ssb_period: 20   

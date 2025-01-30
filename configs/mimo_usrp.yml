@@ -6,4 +6,4 @@
 
 cell_cfg:
   nof_antennas_ul: 2
-  nof_antennas_dl: 2
+  # nof_antennas_dl: 2
