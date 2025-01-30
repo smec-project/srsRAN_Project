@@ -24,13 +24,22 @@
 
 #include "../slicing/slice_ue_repository.h"
 #include "scheduler_policy.h"
+#include "scheduler_priority_interface.h"
+#include <map>
+#include <thread>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>  // For close()
+#include <fcntl.h>  // For non-blocking socket
 
 namespace srsran {
 
-class scheduler_time_pf : public scheduler_policy
+class scheduler_time_pf : public scheduler_policy, public scheduler_priority_handler
 {
 public:
-  scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_);
+  explicit scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_);
+  ~scheduler_time_pf();
 
   void dl_sched(ue_pdsch_allocator&          pdsch_alloc,
                 const ue_resource_grid_view& res_grid,
@@ -41,6 +50,10 @@ public:
                 const ue_resource_grid_view& res_grid,
                 ul_ran_slice_candidate&      slice_candidate,
                 ul_harq_pending_retx_list    harq_pending_retx_list) override;
+
+  // Priority handler interface implementation
+  void update_ue_priority(const ue_priority_update& update) override;
+  void reset_ue_priority(du_ue_index_t ue_index) override;
 
 private:
   // Value used to flag that the UE cannot be allocated in a given slot.
@@ -187,6 +200,21 @@ private:
   ue_dl_queue_t dl_queue;
   /// Priority queue of UEs to be scheduled in UL. The UE in front of the queue has highest priority and vice versa.
   ue_ul_queue_t ul_queue;
+
+  // Store UE priority values
+  std::map<du_ue_index_t, double> ul_priorities;
+
+  void start_priority_server();
+  void handle_priority_messages();
+  bool setup_server_socket();
+  void handle_client_connection(int client_sock);
+  
+  // Socket related members
+  int server_sockfd;
+  int client_sockfd;
+  std::thread socket_thread;
+  bool running;
+  static constexpr int PRIORITY_PORT = 5555;
 };
 
 } // namespace srsran

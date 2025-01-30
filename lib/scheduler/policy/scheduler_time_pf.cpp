@@ -22,6 +22,7 @@
 
 #include "scheduler_time_pf.h"
 #include "../support/csi_report_helpers.h"
+#include <iostream>
 
 using namespace srsran;
 
@@ -29,9 +30,68 @@ using namespace srsran;
 // imprecision.
 constexpr unsigned MAX_PF_COEFF = 10;
 
-scheduler_time_pf::scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_) :
-  fairness_coeff(std::get<time_pf_scheduler_expert_config>(expert_cfg_.strategy_cfg).pf_sched_fairness_coeff)
+bool scheduler_time_pf::setup_server_socket()
 {
+    // Initialize socket
+    server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_sockfd < 0) {
+        srslog::fetch_basic_logger("SCHED").error("Socket creation failed");
+        return false;
+    }
+
+    // Allow reuse of address and port
+    int reuse = 1;
+    if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        srslog::fetch_basic_logger("SCHED").error("setsockopt failed");
+        close(server_sockfd);
+        return false;
+    }
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));  // Clear the structure
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(PRIORITY_PORT);
+
+    if (bind(server_sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        srslog::fetch_basic_logger("SCHED").error("Bind failed");
+        close(server_sockfd);
+        return false;
+    }
+
+    if (listen(server_sockfd, 1) < 0) {
+        srslog::fetch_basic_logger("SCHED").error("Listen failed");
+        close(server_sockfd);
+        return false;
+    }
+
+    std::cout << "Server socket setup complete, listening on port " << PRIORITY_PORT << std::endl;
+    return true;
+}
+
+scheduler_time_pf::scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_) :
+    fairness_coeff(std::get<time_pf_scheduler_expert_config>(expert_cfg_.strategy_cfg).pf_sched_fairness_coeff),
+    running(true)
+{
+    if (setup_server_socket()) {
+        // Start socket handling thread only if socket setup was successful
+        socket_thread = std::thread(&scheduler_time_pf::handle_priority_messages, this);
+        srslog::fetch_basic_logger("SCHED").info("Priority control server started on port {}", PRIORITY_PORT);
+    } else {
+        srslog::fetch_basic_logger("SCHED").info("Priority control server setup failed, using normal PF scheduling");
+    }
+}
+
+scheduler_time_pf::~scheduler_time_pf()
+{
+    running = false;
+    if (socket_thread.joinable()) {
+        socket_thread.join();
+    }
+    if (client_sockfd > 0) {
+        close(client_sockfd);
+    }
+    close(server_sockfd);
 }
 
 dl_alloc_result scheduler_time_pf::schedule_dl_retxs(ue_pdsch_allocator&          pdsch_alloc,
@@ -476,26 +536,30 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
 
   sch_mcs_index mcs = ue_cc->link_adaptation_controller().calculate_ul_mcs(pusch_cfg.mcs_table);
 
-  // Calculate UL PF priority.
-  // NOTE: Estimated instantaneous UL rate is calculated assuming entire BWP CRBs are allocated to UE.
-  const double estimated_rate   = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
-  const double current_avg_rate = total_ul_avg_rate();
-  double       pf_weight        = 0;
-  if (current_avg_rate != 0) {
-    if (parent->fairness_coeff >= MAX_PF_COEFF) {
-      // For very high coefficients, the pow(.) will be very high, leading to pf_weight of 0 due to lack of precision.
-      // In such scenarios, we change the way to compute the PF weight. Instead, we completely disregard the estimated
-      // rate, as its impact is minimal.
-      pf_weight = 1 / current_avg_rate;
-    } else {
-      pf_weight = estimated_rate / pow(current_avg_rate, parent->fairness_coeff);
-    }
+  // Check if there's an absolute priority set for this UE
+  auto it = parent->ul_priorities.find(u.ue_index());
+  if (it != parent->ul_priorities.end()) {
+    // Use the absolute priority value directly
+    ul_prio = it->second;
   } else {
-    pf_weight = estimated_rate == 0 ? 0 : std::numeric_limits<double>::max();
+    // Calculate UL PF priority as normal
+    const double estimated_rate   = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
+    const double current_avg_rate = total_ul_avg_rate();
+    double       pf_weight        = 0;
+    if (current_avg_rate != 0) {
+      if (parent->fairness_coeff >= MAX_PF_COEFF) {
+        pf_weight = 1 / current_avg_rate;
+      } else {
+        pf_weight = estimated_rate / pow(current_avg_rate, parent->fairness_coeff);
+      }
+    } else {
+      pf_weight = estimated_rate == 0 ? 0 : std::numeric_limits<double>::max();
+    }
+    const double rate_weight = compute_ul_rate_weight(
+        u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
+    ul_prio = rate_weight * pf_weight;
   }
-  const double rate_weight = compute_ul_rate_weight(
-      u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
-  ul_prio         = rate_weight * pf_weight;
+  // std::cout << "UL priority for UE " << u.ue_index() << ": " <<  l_prio << std::endl;
   sr_ind_received = u.has_pending_sr();
 }
 
@@ -602,4 +666,57 @@ bool scheduler_time_pf::ue_ul_prio_compare::operator()(const scheduler_time_pf::
   }
   // All other cases compare priorities.
   return lhs->ul_prio < rhs->ul_prio;
+}
+
+void scheduler_time_pf::update_ue_priority(const ue_priority_update& update)
+{
+    ul_priorities[update.ue_index] = update.priority_value;
+}
+
+void scheduler_time_pf::reset_ue_priority(du_ue_index_t ue_index)
+{
+    ul_priorities.erase(ue_index);
+}
+
+void scheduler_time_pf::handle_priority_messages()
+{
+    #pragma pack(push, 1)
+    struct priority_message {
+        uint16_t ue_index;
+        double priority;
+        uint8_t is_reset;
+    };
+    #pragma pack(pop)
+
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(client_addr);
+    
+    while (running) {
+        client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_addr, &len);
+        if (client_sockfd < 0) {
+            ul_priorities.clear();
+            continue;
+        }
+
+        priority_message msg;
+        while (running) {
+            ssize_t n = recv(client_sockfd, &msg, sizeof(msg), 0);
+            if (n <= 0) {
+                ul_priorities.clear();
+                close(client_sockfd);
+                break;
+            }
+
+            // std::cout << "Received message from client: UE=" << msg.ue_index 
+            //          << ", Priority=" << msg.priority 
+            //          << ", Reset=" << (msg.is_reset ? "true" : "false") << std::endl;
+
+            if (msg.is_reset) {
+                reset_ue_priority(to_du_ue_index(msg.ue_index));
+            } else {
+                ue_priority_update update{to_du_ue_index(msg.ue_index), msg.priority};
+                update_ue_priority(update);
+            }
+        }
+    }
 }
