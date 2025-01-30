@@ -80,6 +80,7 @@ private:
 
   const cell_configuration&       cell_cfg;
   const ue_channel_state_manager& ue_ch_st;
+  srslog::basic_logger& logger;
 
   // Limits for the MCS selection.
   pdsch_mcs_table               last_dl_mcs_table;

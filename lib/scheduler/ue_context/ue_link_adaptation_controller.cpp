@@ -22,12 +22,14 @@
 
 #include "ue_link_adaptation_controller.h"
 #include "../support/mcs_calculator.h"
+#include "srsran/srslog/srslog.h"
 
 using namespace srsran;
 
 ue_link_adaptation_controller::ue_link_adaptation_controller(const cell_configuration&       cell_cfg_,
                                                              const ue_channel_state_manager& ue_channel_state) :
-  cell_cfg(cell_cfg_), ue_ch_st(ue_channel_state)
+  cell_cfg(cell_cfg_), ue_ch_st(ue_channel_state),
+  logger(srslog::fetch_basic_logger("UL_CTL"))
 {
   if (cell_cfg.expert_cfg.ue.olla_cqi_inc > 0) {
     dl_olla.emplace(cell_cfg.expert_cfg.ue.olla_dl_target_bler,
@@ -150,6 +152,7 @@ sch_mcs_index ue_link_adaptation_controller::calculate_ul_mcs(pusch_mcs_table mc
   // Derive MCS using the combination of estimated UL SNR + outer loop link adaptation.
   sch_mcs_index mcs = map_snr_to_mcs_ul(get_effective_snr(), mcs_table);
   mcs               = std::min(std::max(mcs, ul_mcs_lims.start()), ul_mcs_lims.stop());
+  logger.error("XIAO: snr = {}, next_mcs = {}", get_effective_snr(), mcs);
 
   return mcs;
 }
