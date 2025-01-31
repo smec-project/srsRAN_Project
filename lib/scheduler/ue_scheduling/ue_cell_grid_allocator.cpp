@@ -20,6 +20,8 @@
  *
  */
 
+#include <iostream>
+
 #include "ue_cell_grid_allocator.h"
 #include "../support/csi_report_helpers.h"
 #include "../support/dci_builder.h"
@@ -32,6 +34,8 @@
 #include "srsran/ran/transform_precoding/transform_precoding_helpers.h"
 #include "srsran/scheduler/scheduler_dci.h"
 #include "srsran/support/error_handling.h"
+#include "scheduler_metrics_sender.h"
+#include "srsran/scheduler/scheduler_metrics.h"
 
 using namespace srsran;
 
@@ -40,6 +44,10 @@ ue_cell_grid_allocator::ue_cell_grid_allocator(const scheduler_ue_expert_config&
                                                srslog::basic_logger&             logger_) :
   expert_cfg(expert_cfg_), ues(ues_), logger(logger_)
 {
+    if (metrics_sender.init(5556)) {
+        srslog::fetch_basic_logger("SCHED").info("Metrics sender initialized on port 5556");
+        std::cout << "Metrics sender initialized on port 5556" << std::endl;
+    }
 }
 
 void ue_cell_grid_allocator::add_cell(du_cell_index_t           cell_index,
@@ -1018,6 +1026,14 @@ ue_cell_grid_allocator::allocate_ul_grant(const ue_pusch_grant& grant, ran_slice
 
     // Update the number of PRBs used in the PUSCH allocation.
     ue_cc->get_ul_power_controller().update_pusch_pw_ctrl_state(pusch_alloc.slot, crbs.length());
+
+    // std::cout << "UE=" << u.ue_index << ", nof_prbs=" << crbs.length()
+    //           << " (RNTI=0x" << std::hex << to_value(u.crnti) << std::dec << ")"
+    //           << ", slot=" << pusch_alloc.slot.to_uint() << std::endl;
+    if (crbs.length() > 0) {
+      ue_scheduling_metrics metrics{u.ue_index, u.crnti, (unsigned)crbs.length(), pusch_alloc.slot};
+      metrics_sender.send_metrics(metrics);
+    }
 
     h_ul->save_grant_params(pusch_sched_ctx, msg.pusch_cfg);
 
