@@ -23,6 +23,7 @@
 #include "scheduler_time_pf.h"
 #include "../support/csi_report_helpers.h"
 #include <iostream>
+#include <sstream>
 
 using namespace srsran;
 
@@ -536,10 +537,11 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
 
   sch_mcs_index mcs = ue_cc->link_adaptation_controller().calculate_ul_mcs(pusch_cfg.mcs_table);
 
-  // Check if there's an absolute priority set for this UE
-  auto it = parent->ul_priorities.find(u.ue_index());
+  // Convert RNTI to hex string format (e.g., "47e1")
+  std::stringstream ss;
+  ss << std::hex << static_cast<unsigned>(u.crnti());  // Get the integer value of RNTI
+  auto it = parent->ul_priorities.find(ss.str());
   if (it != parent->ul_priorities.end()) {
-    // Use the absolute priority value directly
     ul_prio = it->second;
   } else {
     // Calculate UL PF priority as normal
@@ -551,6 +553,7 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
         pf_weight = 1 / current_avg_rate;
       } else {
         pf_weight = estimated_rate / pow(current_avg_rate, parent->fairness_coeff);
+        // std::cout << "UL estimated_rate: " << estimated_rate << ", current_avg_rate: " << current_avg_rate << ", pf_weight: " << pf_weight << std::endl;
       }
     } else {
       pf_weight = estimated_rate == 0 ? 0 : std::numeric_limits<double>::max();
@@ -559,7 +562,7 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
         u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
     ul_prio = rate_weight * pf_weight;
   }
-  // std::cout << "UL priority for UE " << u.ue_index() << ": " <<  l_prio << std::endl;
+  std::cout << "UL priority for UE " << ss.str() << ": " <<  ul_prio << std::endl;
   sr_ind_received = u.has_pending_sr();
 }
 
@@ -668,21 +671,11 @@ bool scheduler_time_pf::ue_ul_prio_compare::operator()(const scheduler_time_pf::
   return lhs->ul_prio < rhs->ul_prio;
 }
 
-void scheduler_time_pf::update_ue_priority(const ue_priority_update& update)
-{
-    ul_priorities[update.ue_index] = update.priority_value;
-}
-
-void scheduler_time_pf::reset_ue_priority(du_ue_index_t ue_index)
-{
-    ul_priorities.erase(ue_index);
-}
-
 void scheduler_time_pf::handle_priority_messages()
 {
     #pragma pack(push, 1)
     struct priority_message {
-        uint16_t ue_index;
+        char rnti[5];  // 4 chars for RNTI + null terminator
         double priority;
         uint8_t is_reset;
     };
@@ -707,15 +700,11 @@ void scheduler_time_pf::handle_priority_messages()
                 break;
             }
 
-            // std::cout << "Received message from client: UE=" << msg.ue_index 
-            //          << ", Priority=" << msg.priority 
-            //          << ", Reset=" << (msg.is_reset ? "true" : "false") << std::endl;
-
+            std::string rnti(msg.rnti);  // Convert char array to string
             if (msg.is_reset) {
-                reset_ue_priority(to_du_ue_index(msg.ue_index));
+                ul_priorities.erase(rnti);
             } else {
-                ue_priority_update update{to_du_ue_index(msg.ue_index), msg.priority};
-                update_ue_priority(update);
+                ul_priorities[rnti] = msg.priority;
             }
         }
     }

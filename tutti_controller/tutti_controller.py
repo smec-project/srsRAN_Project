@@ -238,15 +238,30 @@ class TuttiController:
     def set_priority(self, rnti: str, priority: float):
         """Send priority update to RAN"""
         try:
-            # Get UE_IDX from current metrics
-            if rnti in self.current_metrics:
-                ue_idx = int(self.current_metrics[rnti]['UE_IDX'])
-                msg = struct.pack('<Hd?', ue_idx, priority, False)
-                self.ran_control_socket.send(msg)
-                return True
-            return False
+            # Format RNTI string and pack message in the correct format
+            rnti_str = f"{rnti:<4}".encode('ascii')  # Left align, space pad to 4 chars
+            msg = struct.pack('=5sdb', rnti_str, priority, False)
+            
+            # Debug output
+            print(f"Setting priority for RNTI {rnti} to {priority}")
+            print(f"Message bytes: {[hex(x) for x in msg]}")
+            
+            self.ran_control_socket.send(msg)
+            return True
         except Exception as e:
             print(f"Failed to send priority update: {e}")
+            return False
+
+    def reset_priority(self, rnti: str):
+        """Reset priority for a specific RNTI"""
+        try:
+            rnti_str = f"{rnti:<4}".encode('ascii')
+            msg = struct.pack('=5sdb', rnti_str, 0.0, True)
+            self.ran_control_socket.send(msg)
+            print(f"Reset priority for RNTI {rnti}")
+            return True
+        except Exception as e:
+            print(f"Failed to reset priority: {e}")
             return False
 
     def stop(self):

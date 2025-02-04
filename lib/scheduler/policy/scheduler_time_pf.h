@@ -24,7 +24,6 @@
 
 #include "../slicing/slice_ue_repository.h"
 #include "scheduler_policy.h"
-#include "scheduler_priority_interface.h"
 #include <map>
 #include <thread>
 #include <sys/socket.h>
@@ -32,10 +31,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>  // For close()
 #include <fcntl.h>  // For non-blocking socket
+#include <sstream>  // For std::stringstream
+#include <iomanip>  // For std::hex
 
 namespace srsran {
 
-class scheduler_time_pf : public scheduler_policy, public scheduler_priority_handler
+class scheduler_time_pf : public scheduler_policy
 {
 public:
   explicit scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_);
@@ -50,10 +51,6 @@ public:
                 const ue_resource_grid_view& res_grid,
                 ul_ran_slice_candidate&      slice_candidate,
                 ul_harq_pending_retx_list    harq_pending_retx_list) override;
-
-  // Priority handler interface implementation
-  void update_ue_priority(const ue_priority_update& update) override;
-  void reset_ue_priority(du_ue_index_t ue_index) override;
 
 private:
   // Value used to flag that the UE cannot be allocated in a given slot.
@@ -202,7 +199,7 @@ private:
   ue_ul_queue_t ul_queue;
 
   // Store UE priority values
-  std::map<du_ue_index_t, double> ul_priorities;
+  std::map<std::string, double> ul_priorities;
 
   void start_priority_server();
   void handle_priority_messages();
