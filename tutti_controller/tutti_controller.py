@@ -39,6 +39,15 @@ class TuttiController:
         # Track resource requirements and pending requests for each UE
         self.ue_resource_needs: Dict[str, int] = {}  # RNTI -> total bytes needed
         self.ue_pending_requests: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> bytes}
+        
+        # Track latest PRB allocation and slot for each UE
+        self.ue_prb_status: Dict[str, tuple] = {}  # RNTI -> (slot, prbs)
+        
+        # Track request timers (elapsed time in ms)
+        self.request_timers: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> elapsed_ms}
+        
+        # Start timer update thread
+        threading.Thread(target=self._update_request_timers, daemon=True).start()
 
     def start(self):
         """Start the controller and all its connections"""
@@ -55,7 +64,7 @@ class TuttiController:
         # Start threads for different functionalities
         threading.Thread(target=self._handle_app_connections, daemon=True).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
-        threading.Thread(target=self._process_and_update, daemon=True).start()
+        # threading.Thread(target=self._process_and_update, daemon=True).start()
         
         return True
 
@@ -112,6 +121,7 @@ class TuttiController:
                         # Initialize resource tracking for new UE
                         self.ue_resource_needs[rnti] = 0
                         self.ue_pending_requests[rnti] = {}
+                        self.request_timers[rnti] = {}
 
                     elif msg_type == "REQUEST":
                         # Format: "REQUEST|RNTI|SEQ_NUM"
@@ -125,11 +135,13 @@ class TuttiController:
                             # Update resource needs and pending requests
                             self.ue_resource_needs[rnti] += request_size
                             self.ue_pending_requests[rnti][seq_num] = request_size
-                            
+
                             # print(f"New request {seq_num} for RNTI {rnti}:")
                             # print(f"  Request size: {request_size} bytes")
                             # print(f"  Total resource need: {self.ue_resource_needs[rnti]} bytes")
                             # print(f"  Pending requests: {len(self.ue_pending_requests[rnti])}")
+                            # Initialize timer for new request
+                            self.request_timers[rnti][seq_num] = 0
                         else:
                             print(f"Warning: Request for unknown RNTI {rnti}")
 
@@ -138,18 +150,23 @@ class TuttiController:
                         _, rnti, seq_num = msg_parts
                         seq_num = int(seq_num)
                         
-                        if rnti in self.ue_pending_requests:
-                            # Get request size and update resource needs
-                            if seq_num in self.ue_pending_requests[rnti]:
-                                completed_size = self.ue_pending_requests[rnti][seq_num]
-                                self.ue_resource_needs[rnti] -= completed_size
-                                del self.ue_pending_requests[rnti][seq_num]
-                                
-                                # print(f"Request {seq_num} completed for RNTI {rnti}:")
-                                # print(f"  Freed resources: {completed_size} bytes")
-                                # print(f"  Remaining resource need: {self.ue_resource_needs[rnti]} bytes")
-                                # print(f"  Remaining requests: {len(self.ue_pending_requests[rnti])}")
-                        else:
+                        # Handle request timer
+                        if rnti in self.request_timers and seq_num in self.request_timers[rnti]:
+                            # final_time = self.request_timers[rnti][seq_num]
+                            # print(f"Request {seq_num} from RNTI {rnti} completed in {final_time}ms")
+                            del self.request_timers[rnti][seq_num]
+                        
+                        # Handle resource tracking
+                        if rnti in self.ue_pending_requests and seq_num in self.ue_pending_requests[rnti]:
+                            completed_size = self.ue_pending_requests[rnti][seq_num]
+                            self.ue_resource_needs[rnti] -= completed_size
+                            del self.ue_pending_requests[rnti][seq_num]
+                            # print(f"Request {seq_num} completed for RNTI {rnti}:")
+                            # print(f"  Freed resources: {completed_size} bytes")
+                            # print(f"  Remaining resource need: {self.ue_resource_needs[rnti]} bytes")
+                            # print(f"  Remaining requests: {len(self.ue_pending_requests[rnti])}")
+                        
+                        if rnti not in self.request_timers and rnti not in self.ue_pending_requests:
                             print(f"Warning: Completion for unknown RNTI {rnti}")
 
                 except Exception as e:
@@ -175,11 +192,20 @@ class TuttiController:
                     values = dict(item.split('=') for item in line.split(','))
                     # Keep RNTI as string
                     rnti = values['RNTI'][-4:]  # Just take last 4 chars
+                    slot = int(values['SLOT'])
+                    prbs = int(values['PRBs'])
+                    
+                    # Store basic metrics
                     metrics[rnti] = {
                         'UE_IDX': values['UE_IDX'],
-                        'PRBs': values['PRBs'],
-                        'SLOT': values['SLOT']
+                        'PRBs': prbs,
+                        'SLOT': slot
                     }
+                    
+                    # Update latest PRB allocation and slot
+                    self.ue_prb_status[rnti] = (slot, prbs)
+                    # print(f"Updated PRB status for RNTI {rnti}: Slot {slot}, PRBs {prbs}")
+                
                 self.current_metrics = metrics
             except Exception as e:
                 print(f"Error receiving RAN metrics: {e}")
@@ -191,17 +217,19 @@ class TuttiController:
                 # Process each UE's requirements and current state
                 for rnti, info in self.ue_info.items():
                     if rnti in self.current_metrics:
-                        metrics = self.current_metrics[rnti]
-                        
                         # Get current resource requirements
                         resource_need = self.ue_resource_needs.get(rnti, 0)
                         pending_count = len(self.ue_pending_requests.get(rnti, {}))
                         
+                        # Get latest PRB allocation
+                        slot, prbs = self.ue_prb_status.get(rnti, (0, 0))
+                        
                         print(f"UE RNTI {rnti} (IDX {info['ue_idx']}) Status:")
                         print(f"  Resource Need: {resource_need} bytes")
                         print(f"  Pending Requests: {pending_count}")
+                        print(f"  Current PRBs: {prbs}")
+                        print(f"  Current Slot: {slot}")
                         print(f"  Latency Requirement: {info['latency_req']}ms")
-                        print(f"  Current Metrics: {metrics}")
                 
                 time.sleep(1)
             except Exception as e:
@@ -233,6 +261,22 @@ class TuttiController:
         self.app_socket.close()
         self.ran_metrics_socket.close()
         self.ran_control_socket.close()
+
+    def _update_request_timers(self):
+        """Update timers for all active requests"""
+        print("Timer update thread started")  # Debug: Confirm thread start
+        update_count = 0
+        while self.running:
+            try:
+                for rnti in list(self.request_timers.keys()):
+                    for req_id in list(self.request_timers[rnti].keys()):
+                        self.request_timers[rnti][req_id] += 1
+                        if update_count % 1000 == 0:  # Print every 1000 updates
+                            print(f"Timer update: RNTI {rnti}, Request {req_id}, Value {self.request_timers[rnti][req_id]}ms")
+                update_count += 1
+                time.sleep(0.001)
+            except Exception as e:
+                print(f"Error updating request timers: {e}")
 
 def main():
     controller = TuttiController()
