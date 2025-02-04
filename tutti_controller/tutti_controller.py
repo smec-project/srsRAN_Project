@@ -35,6 +35,10 @@ class TuttiController:
         self.ue_info: Dict[str, dict] = {}  # RNTI (str) -> {app_id, latency_req, request_size, ue_idx}
         self.request_sequences: Dict[str, list] = {}  # RNTI (str) -> list of sequence numbers
         self.app_requirements: Dict[str, Dict[str, dict]] = {}  # UE_IDX -> {app_id -> requirements}
+        
+        # Track resource requirements and pending requests for each UE
+        self.ue_resource_needs: Dict[str, int] = {}  # RNTI -> total bytes needed
+        self.ue_pending_requests: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> bytes}
 
     def start(self):
         """Start the controller and all its connections"""
@@ -105,13 +109,27 @@ class TuttiController:
                         self.request_sequences[rnti] = []
                         print(f"New UE registered - RNTI: {rnti}, UE_IDX: {ue_idx}, "
                               f"Latency Req: {latency_req}ms, Size: {request_size} bytes")
+                        # Initialize resource tracking for new UE
+                        self.ue_resource_needs[rnti] = 0
+                        self.ue_pending_requests[rnti] = {}
 
                     elif msg_type == "REQUEST":
                         # Format: "REQUEST|RNTI|SEQ_NUM"
                         _, rnti, seq_num = msg_parts
                         seq_num = int(seq_num)
-                        if rnti in self.request_sequences:
-                            self.request_sequences[rnti].append(seq_num)
+                        
+                        if rnti in self.ue_info:
+                            # Calculate request size in bytes
+                            request_size = self.ue_info[rnti]['request_size']
+                            
+                            # Update resource needs and pending requests
+                            self.ue_resource_needs[rnti] += request_size
+                            self.ue_pending_requests[rnti][seq_num] = request_size
+                            
+                            # print(f"New request {seq_num} for RNTI {rnti}:")
+                            # print(f"  Request size: {request_size} bytes")
+                            # print(f"  Total resource need: {self.ue_resource_needs[rnti]} bytes")
+                            # print(f"  Pending requests: {len(self.ue_pending_requests[rnti])}")
                         else:
                             print(f"Warning: Request for unknown RNTI {rnti}")
 
@@ -119,11 +137,18 @@ class TuttiController:
                         # Format: "DONE|RNTI|SEQ_NUM"
                         _, rnti, seq_num = msg_parts
                         seq_num = int(seq_num)
-                        if rnti in self.request_sequences:
-                            # Remove the completed request from the sequence
-                            if seq_num in self.request_sequences[rnti]:
-                                self.request_sequences[rnti].remove(seq_num)
-                            print(f"Request {seq_num} completed for RNTI {rnti}")
+                        
+                        if rnti in self.ue_pending_requests:
+                            # Get request size and update resource needs
+                            if seq_num in self.ue_pending_requests[rnti]:
+                                completed_size = self.ue_pending_requests[rnti][seq_num]
+                                self.ue_resource_needs[rnti] -= completed_size
+                                del self.ue_pending_requests[rnti][seq_num]
+                                
+                                # print(f"Request {seq_num} completed for RNTI {rnti}:")
+                                # print(f"  Freed resources: {completed_size} bytes")
+                                # print(f"  Remaining resource need: {self.ue_resource_needs[rnti]} bytes")
+                                # print(f"  Remaining requests: {len(self.ue_pending_requests[rnti])}")
                         else:
                             print(f"Warning: Completion for unknown RNTI {rnti}")
 
@@ -165,24 +190,18 @@ class TuttiController:
             try:
                 # Process each UE's requirements and current state
                 for rnti, info in self.ue_info.items():
-                    # Get current metrics for this UE using RNTI directly
                     if rnti in self.current_metrics:
                         metrics = self.current_metrics[rnti]
                         
-                        # Get pending requests count
-                        pending_requests = len(self.request_sequences.get(rnti, []))
+                        # Get current resource requirements
+                        resource_need = self.ue_resource_needs.get(rnti, 0)
+                        pending_count = len(self.ue_pending_requests.get(rnti, {}))
                         
-                        print(f"UE RNTI {rnti} (IDX {info['ue_idx']}):")
+                        print(f"UE RNTI {rnti} (IDX {info['ue_idx']}) Status:")
+                        print(f"  Resource Need: {resource_need} bytes")
+                        print(f"  Pending Requests: {pending_count}")
                         print(f"  Latency Requirement: {info['latency_req']}ms")
-                        print(f"  Request Size: {info['request_size']} bytes")
-                        print(f"  Pending Requests: {pending_requests}")
                         print(f"  Current Metrics: {metrics}")
-                        
-                        # TODO: Implement priority computation based on:
-                        # - Latency requirement
-                        # - Request size
-                        # - Number of pending requests
-                        # - Current metrics
                 
                 time.sleep(1)
             except Exception as e:
