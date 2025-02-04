@@ -20,6 +20,7 @@ ru_sdr:
   device_driver: uhd
   device_args: type=x300, addr=192.168.40.2
   srate: 92.16
+  clock: gpsdo
   tx_gain: 20
   rx_gain: 30
 
