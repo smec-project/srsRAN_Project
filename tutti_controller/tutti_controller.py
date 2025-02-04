@@ -115,6 +115,18 @@ class TuttiController:
                         else:
                             print(f"Warning: Request for unknown RNTI {rnti}")
 
+                    elif msg_type == "DONE":
+                        # Format: "DONE|RNTI|SEQ_NUM"
+                        _, rnti, seq_num = msg_parts
+                        seq_num = int(seq_num)
+                        if rnti in self.request_sequences:
+                            # Remove the completed request from the sequence
+                            if seq_num in self.request_sequences[rnti]:
+                                self.request_sequences[rnti].remove(seq_num)
+                            print(f"Request {seq_num} completed for RNTI {rnti}")
+                        else:
+                            print(f"Warning: Completion for unknown RNTI {rnti}")
+
                 except Exception as e:
                     print(f"Error processing application message: {e}")
                     break
