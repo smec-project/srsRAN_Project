@@ -81,7 +81,7 @@ def test_scenario(rnti: str):
         print(f"\nStarting priority increase test for RNTI {rnti}")
         
         # Test with smaller values first
-        test_priorities = [0.1, 0.5, 1.0, 2.0, 5.0]
+        test_priorities = [i for i in range(100)]
         for priority in test_priorities:
             print(f"\nTesting priority {priority}")
             controller.set_priority(rnti, priority)

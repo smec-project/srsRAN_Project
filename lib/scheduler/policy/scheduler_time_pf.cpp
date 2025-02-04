@@ -541,28 +541,27 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   std::stringstream ss;
   ss << std::hex << static_cast<unsigned>(u.crnti());  // Get the integer value of RNTI
   auto it = parent->ul_priorities.find(ss.str());
-  if (it != parent->ul_priorities.end()) {
-    ul_prio = it->second;
-  } else {
-    // Calculate UL PF priority as normal
-    const double estimated_rate   = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
-    const double current_avg_rate = total_ul_avg_rate();
-    double       pf_weight        = 0;
-    if (current_avg_rate != 0) {
-      if (parent->fairness_coeff >= MAX_PF_COEFF) {
-        pf_weight = 1 / current_avg_rate;
-      } else {
-        pf_weight = estimated_rate / pow(current_avg_rate, parent->fairness_coeff);
-        // std::cout << "UL estimated_rate: " << estimated_rate << ", current_avg_rate: " << current_avg_rate << ", pf_weight: " << pf_weight << std::endl;
-      }
+  // Calculate UL PF priority as normal
+  const double estimated_rate   = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
+  const double current_avg_rate = total_ul_avg_rate();
+  double       pf_weight        = 0;
+  if (current_avg_rate != 0) {
+    if (parent->fairness_coeff >= MAX_PF_COEFF) {
+      pf_weight = 1 / current_avg_rate;
     } else {
-      pf_weight = estimated_rate == 0 ? 0 : std::numeric_limits<double>::max();
+      pf_weight = estimated_rate / pow(current_avg_rate, parent->fairness_coeff);
+      // std::cout << "UL estimated_rate: " << estimated_rate << ", current_avg_rate: " << current_avg_rate << ", pf_weight: " << pf_weight << std::endl;
     }
-    const double rate_weight = compute_ul_rate_weight(
-        u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
-    ul_prio = rate_weight * pf_weight;
+  } else {
+    pf_weight = estimated_rate == 0 ? 0 : std::numeric_limits<double>::max();
   }
-  std::cout << "UL priority for UE " << ss.str() << ": " <<  ul_prio << std::endl;
+  const double rate_weight = compute_ul_rate_weight(
+      u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
+  
+  // Get offset from ul_priorities if it exists, otherwise use 0
+  double offset = (it != parent->ul_priorities.end()) ? it->second : 0;
+  ul_prio = rate_weight * pf_weight + offset;
+  // std::cout << "UL priority for UE " << ss.str() << ": " <<  rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
   sr_ind_received = u.has_pending_sr();
 }
 
