@@ -59,8 +59,8 @@ class TuttiController:
         self.request_prb_allocations: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> total_allocated_prbs}
         
         # Start priority update thread
-        # self.priority_thread = threading.Thread(target=self._update_priorities)
-        # self.priority_thread.start()
+        self.priority_thread = threading.Thread(target=self._update_priorities)
+        self.priority_thread.start()
 
     def start(self):
         """Start the controller and all its connections"""
@@ -77,7 +77,6 @@ class TuttiController:
         # Start threads for different functionalities
         threading.Thread(target=self._handle_app_connections, daemon=True).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
-        # threading.Thread(target=self._process_and_update, daemon=True).start()
         
         return True
 
@@ -163,9 +162,9 @@ class TuttiController:
                         
                         # Calculate final processing time
                         if rnti in self.request_start_times and seq_num in self.request_start_times[rnti]:
-                            start_time = self.request_start_times[rnti][seq_num]
-                            elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
-                            print(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms")
+                            # start_time = self.request_start_times[rnti][seq_num]
+                            # elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
+                            # print(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms")
                             del self.request_start_times[rnti][seq_num]
                         
                         # Handle resource tracking
@@ -224,31 +223,6 @@ class TuttiController:
                 
             except Exception as e:
                 print(f"Error receiving RAN metrics: {e}")
-
-    def _process_and_update(self):
-        """Process metrics and requirements, update priorities"""
-        while self.running:
-            try:
-                # Process each UE's requirements and current state
-                for rnti, info in self.ue_info.items():
-                    if rnti in self.current_metrics:
-                        # Get current resource requirements
-                        resource_need = self.ue_resource_needs.get(rnti, 0)
-                        pending_count = len(self.ue_pending_requests.get(rnti, {}))
-                        
-                        # Get latest PRB allocation
-                        slot, prbs = self.ue_prb_status.get(rnti, (0, 0))
-                        
-                        print(f"UE RNTI {rnti} (IDX {info['ue_idx']}) Status:")
-                        print(f"  Resource Need: {resource_need} bytes")
-                        print(f"  Pending Requests: {pending_count}")
-                        print(f"  Current PRBs: {prbs}")
-                        print(f"  Current Slot: {slot}")
-                        print(f"  Latency Requirement: {info['latency_req']}ms")
-                
-                time.sleep(1)
-            except Exception as e:
-                print(f"Error in processing loop: {e}")
 
     def set_priority(self, rnti: str, priority: float):
         """Send priority update to RAN"""
@@ -332,6 +306,8 @@ class TuttiController:
         # Calculate priority adjustments based on PRB differences
         priority_adjustments = {}
         for rnti, (_, required_prbs_per_tti) in ue_prb_requirements.items():
+            if rnti not in self.prb_history:
+                return DEFAULT_PRIORITY_OFFSET
             actual_prbs = self.prb_history[rnti][latest_slot]
             prb_difference = actual_prbs - required_prbs_per_tti
             current_offset = self.ue_priorities.get(rnti, DEFAULT_PRIORITY_OFFSET)
@@ -370,15 +346,22 @@ class TuttiController:
         
         # Calculate remaining PRBs needed
         total_prbs_needed = (self.ue_pending_requests[ue_rnti][earliest_req_id] + BYTES_PER_PRB - 1) // BYTES_PER_PRB
+        
+        # Safely get allocated PRBs
+        if ue_rnti not in self.request_prb_allocations:
+            self.request_prb_allocations[ue_rnti] = {}
         prbs_allocated = self.request_prb_allocations[ue_rnti].get(earliest_req_id, 0)
+        
         remaining_prbs = max(0, total_prbs_needed - prbs_allocated)
         
         # Calculate priority using exponential decay and remaining PRBs
         priority = remaining_prbs * math.exp(-1 * time_to_deadline_s)
-        print(f"Accelerate calculation for RNTI {ue_rnti}:")
+        
+        print(f"Accelerate calculation for RNTI {ue_rnti} req_id {earliest_req_id}:")
         print(f"  Time to deadline: {time_to_deadline_s:.3f}s")
         print(f"  Remaining PRBs: {remaining_prbs}")
         print(f"  Priority: {priority}")
+        
         return priority
 
     def _update_priorities(self):
@@ -399,7 +382,8 @@ class TuttiController:
                         
                     requests = self.request_start_times[rnti]
                     if not requests:  # No requests for this UE
-                        self.reset_priority(rnti)
+                        # self.reset_priority(rnti)
+                        # print(f"Reset priority for RNTI {rnti}")
                         continue
                     
                     # Get UE's latency requirement

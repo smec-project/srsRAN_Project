@@ -24,12 +24,17 @@
 #include "../support/csi_report_helpers.h"
 #include <iostream>
 #include <sstream>
+#include <iomanip>
+#include <mutex>
 
 using namespace srsran;
 
 // [Implementation-defined] Limit for the coefficient of the proportional fair metric to avoid issues with double
 // imprecision.
 constexpr unsigned MAX_PF_COEFF = 10;
+
+std::mutex scheduler_time_pf::priorities_mutex;
+std::map<unsigned, double> scheduler_time_pf::ul_priorities;
 
 bool scheduler_time_pf::setup_server_socket()
 {
@@ -537,20 +542,28 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
 
   sch_mcs_index mcs = ue_cc->link_adaptation_controller().calculate_ul_mcs(pusch_cfg.mcs_table);
 
-  // Convert RNTI to hex string format (e.g., "47e1")
-  std::stringstream ss;
-  ss << std::hex << static_cast<unsigned>(u.crnti());  // Get the integer value of RNTI
-  auto it = parent->ul_priorities.find(ss.str());
+  // Get RNTI as unsigned value
+  unsigned rnti_val = static_cast<unsigned>(u.crnti()) & 0xFFFF;
+  
+  double offset = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
+    auto it = scheduler_time_pf::ul_priorities.find(rnti_val);
+    if (it != scheduler_time_pf::ul_priorities.end()) {
+        offset = it->second;
+    }
+  }
+
   // Calculate UL PF priority as normal
-  const double estimated_rate   = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
+  const double estimated_rate = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
   const double current_avg_rate = total_ul_avg_rate();
-  double       pf_weight        = 0;
+  double pf_weight = 0;
+  
   if (current_avg_rate != 0) {
     if (parent->fairness_coeff >= MAX_PF_COEFF) {
       pf_weight = 1 / current_avg_rate;
     } else {
       pf_weight = estimated_rate / pow(current_avg_rate, parent->fairness_coeff);
-      // std::cout << "UL estimated_rate: " << estimated_rate << ", current_avg_rate: " << current_avg_rate << ", pf_weight: " << pf_weight << std::endl;
     }
   } else {
     pf_weight = estimated_rate == 0 ? 0 : std::numeric_limits<double>::max();
@@ -558,12 +571,9 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   const double rate_weight = compute_ul_rate_weight(
       u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
   
-  // Get offset from ul_priorities if it exists, otherwise use 0
-  double offset = (it != parent->ul_priorities.end()) ? it->second : 0;
   ul_prio = rate_weight * pf_weight + offset;
-  if (offset != 0) {
-    std::cout << "UL priority for UE " << ss.str() << ": " <<  rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
-  }
+  std::cout << "UL priority for UE 0x" << std::hex << rnti_val << std::dec << ": " 
+            << rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
   sr_ind_received = u.has_pending_sr();
 }
 
@@ -688,7 +698,7 @@ void scheduler_time_pf::handle_priority_messages()
     while (running) {
         client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_addr, &len);
         if (client_sockfd < 0) {
-            ul_priorities.clear();
+            std::cout << "Accept failed, but keeping existing priorities" << std::endl;
             continue;
         }
 
@@ -696,16 +706,25 @@ void scheduler_time_pf::handle_priority_messages()
         while (running) {
             ssize_t n = recv(client_sockfd, &msg, sizeof(msg), 0);
             if (n <= 0) {
-                ul_priorities.clear();
+                std::cout << "Connection closed, but keeping existing priorities" << std::endl;
                 close(client_sockfd);
-                break;
+                break; 
             }
 
-            std::string rnti(msg.rnti);  // Convert char array to string
-            if (msg.is_reset) {
-                ul_priorities.erase(rnti);
-            } else {
-                ul_priorities[rnti] = msg.priority;
+            // Convert RNTI string to unsigned
+            std::string rnti_str(msg.rnti);
+            unsigned rnti_val = std::stoul(rnti_str, nullptr, 16);
+
+            {
+                std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
+                if (msg.is_reset) {
+                    scheduler_time_pf::ul_priorities.erase(rnti_val);
+                    std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
+                } else {
+                    scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
+                    std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val 
+                             << std::dec << " to " << msg.priority << std::endl;
+                }
             }
         }
     }

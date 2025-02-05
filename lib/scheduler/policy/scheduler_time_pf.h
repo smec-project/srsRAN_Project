@@ -33,6 +33,8 @@
 #include <fcntl.h>  // For non-blocking socket
 #include <sstream>  // For std::stringstream
 #include <iomanip>  // For std::hex
+#include <mutex>
+#include <atomic>
 
 namespace srsran {
 
@@ -61,6 +63,10 @@ private:
   const double fairness_coeff;
   /// Coefficient used to compute exponential moving average.
   const double exp_avg_alpha = 0.01;
+
+  // 改成静态成员
+  static std::mutex priorities_mutex;
+  static std::map<unsigned, double> ul_priorities;
 
   /// Holds the information needed to compute priority of a UE in a priority queue.
   struct ue_ctxt {
@@ -197,9 +203,6 @@ private:
   ue_dl_queue_t dl_queue;
   /// Priority queue of UEs to be scheduled in UL. The UE in front of the queue has highest priority and vice versa.
   ue_ul_queue_t ul_queue;
-
-  // Store UE priority values
-  std::map<std::string, double> ul_priorities;
 
   void start_priority_server();
   void handle_priority_messages();
