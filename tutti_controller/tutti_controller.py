@@ -226,7 +226,7 @@ class TuttiController:
                 
                 # Update PRB history when receiving new metrics
                 for rnti, metrics in self.current_metrics.items():
-                    print(f"Received metrics for RNTI {rnti}: {metrics}")
+                    # print(f"Received metrics for RNTI {rnti}: {metrics}")
                     if 'SLOT' in metrics and 'PRBs' in metrics:
                         self._update_prb_history(rnti, metrics['SLOT'], metrics['PRBs'])
                 
@@ -267,7 +267,7 @@ class TuttiController:
             
             # Debug output
             print(f"Setting priority for RNTI {rnti} to {priority}")
-            print(f"Message bytes: {[hex(x) for x in msg]}")
+            # print(f"Message bytes: {[hex(x) for x in msg]}")
             
             self.ran_control_socket.send(msg)
             return True
@@ -286,7 +286,7 @@ class TuttiController:
             rnti_str = f"{rnti:<4}".encode('ascii')
             msg = struct.pack('=5sdb', rnti_str, 0.0, True)
             self.ran_control_socket.send(msg)
-            print(f"Reset priority for RNTI {rnti}")
+            # print(f"Reset priority for RNTI {rnti}")
             return True
         except Exception as e:
             print(f"Failed to reset priority: {e}")
@@ -416,7 +416,7 @@ class TuttiController:
                         
                     requests = self.request_timers[rnti]
                     if not requests:  # No requests for this UE
-                        print(f"No requests for RNTI {rnti}, resetting priority")
+                        # print(f"No requests for RNTI {rnti}, resetting priority")
                         self.reset_priority(rnti)
                         continue
                     
