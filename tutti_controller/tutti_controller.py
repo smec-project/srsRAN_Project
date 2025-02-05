@@ -2,6 +2,7 @@ import socket
 import struct
 import threading
 import time
+import math
 from typing import Dict, Optional
 
 class TuttiController:
@@ -46,8 +47,23 @@ class TuttiController:
         # Track request timers (elapsed time in ms)
         self.request_timers: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> elapsed_ms}
         
+        # Track UE priority states
+        self.ue_priorities: Dict[str, float] = {}  # RNTI -> current_priority
+        
+        # Track PRB allocation history
+        self.HISTORY_WINDOW = 100  # Keep last 100 slot records
+        self.prb_history: Dict[str, Dict[int, int]] = {}  # RNTI -> {slot -> prbs}
+        self.slot_history: list = []  # Ordered list of slots we've seen
+        
+        # Track allocated PRBs for each request
+        self.request_prb_allocations: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> total_allocated_prbs}
+        
         # Start timer update thread
         threading.Thread(target=self._update_request_timers, daemon=True).start()
+        
+        # Start priority update thread
+        self.priority_thread = threading.Thread(target=self._update_priorities)
+        self.priority_thread.start()
 
     def start(self):
         """Start the controller and all its connections"""
@@ -207,6 +223,13 @@ class TuttiController:
                     # print(f"Updated PRB status for RNTI {rnti}: Slot {slot}, PRBs {prbs}")
                 
                 self.current_metrics = metrics
+                
+                # Update PRB history when receiving new metrics
+                for rnti, metrics in self.current_metrics.items():
+                    print(f"Received metrics for RNTI {rnti}: {metrics}")
+                    if 'SLOT' in metrics and 'PRBs' in metrics:
+                        self._update_prb_history(rnti, metrics['SLOT'], metrics['PRBs'])
+                
             except Exception as e:
                 print(f"Error receiving RAN metrics: {e}")
 
@@ -255,6 +278,11 @@ class TuttiController:
     def reset_priority(self, rnti: str):
         """Reset priority for a specific RNTI"""
         try:
+            # Reset priority state
+            if rnti in self.ue_priorities:
+                self.ue_priorities[rnti] = 0.0
+            
+            # Reset in scheduler
             rnti_str = f"{rnti:<4}".encode('ascii')
             msg = struct.pack('=5sdb', rnti_str, 0.0, True)
             self.ran_control_socket.send(msg)
@@ -292,6 +320,180 @@ class TuttiController:
                 time.sleep(0.001)
             except Exception as e:
                 print(f"Error updating request timers: {e}")
+
+    def _initialize_ue_priority(self, rnti: str):
+        """Initialize priority for a new UE"""
+        self.ue_priorities[rnti] = 0.0
+
+    def _calculate_incentive_priority(self, ue_rnti: str) -> float:
+        """Calculate priority for incentive mode (first half of latency requirement)"""
+        # Constants
+        BYTES_PER_PRB = 90
+        TTI_DURATION = 2.5  # ms
+        DEFAULT_PRIORITY_OFFSET = 1.0  # Initial priority offset
+        
+        # Store calculations for each UE with requests
+        ue_prb_requirements = {}  # rnti -> (total_prbs, prbs_per_tti)
+        
+        # Calculate for each UE with active requests
+        for rnti in self.request_timers.keys():
+            if not self.request_timers[rnti]:
+                continue
+                
+            earliest_req_id = min(self.request_timers[rnti].items(), key=lambda x: x[1])[0]
+            request_size = self.ue_pending_requests[rnti][earliest_req_id]
+            total_prbs = (request_size + BYTES_PER_PRB - 1) // BYTES_PER_PRB
+            latency_req = self.ue_info[rnti]['latency_req']
+            available_ttis = latency_req / TTI_DURATION
+            prbs_per_tti = (total_prbs + int(available_ttis) - 1) // int(available_ttis)
+            ue_prb_requirements[rnti] = (total_prbs, prbs_per_tti)
+        
+        # Get the latest slot from history
+        if not self.slot_history:
+            return DEFAULT_PRIORITY_OFFSET
+        latest_slot = self.slot_history[-1]
+        
+        # Calculate priority adjustments based on PRB differences
+        priority_adjustments = {}
+        for rnti, (_, required_prbs_per_tti) in ue_prb_requirements.items():
+            actual_prbs = self.prb_history[rnti][latest_slot]
+            prb_difference = actual_prbs - required_prbs_per_tti
+            current_offset = self.ue_priorities.get(rnti, DEFAULT_PRIORITY_OFFSET)
+            priority_adjustments[rnti] = prb_difference * current_offset
+        total_priority_metric = sum(priority_adjustments.values())
+        ue_priority_metric = priority_adjustments[ue_rnti]
+        current_offset = self.ue_priorities[ue_rnti]
+        if ue_priority_metric > 0 and total_priority_metric < 0:
+            current_offset = current_offset / 2
+        else:
+            actual_prbs = self.prb_history[ue_rnti][latest_slot]
+            if actual_prbs > 0:
+                current_offset = self.ue_priorities[ue_rnti] + max(DEFAULT_PRIORITY_OFFSET, abs(actual_prbs - ue_prb_requirements[ue_rnti][0])/actual_prbs)
+            else:
+                current_offset = self.ue_priorities[ue_rnti] + DEFAULT_PRIORITY_OFFSET
+        return current_offset
+
+    def _calculate_accelerate_priority(self, ue_rnti: str) -> float:
+        """Calculate priority for accelerate mode (second half of latency requirement)"""
+        # Constants
+        BYTES_PER_PRB = 90
+        MS_TO_S = 0.001  # Convert ms to s
+        
+        # Get current request info
+        if not self.request_timers[ue_rnti]:
+            return 0.0
+            
+        # Get earliest request and its timer
+        earliest_req_id = min(self.request_timers[ue_rnti].items(), key=lambda x: x[1])[0]
+        elapsed_time_ms = self.request_timers[ue_rnti][earliest_req_id]
+        latency_req_ms = self.ue_info[ue_rnti]['latency_req']
+        
+        # Calculate time to deadline in seconds
+        time_to_deadline_s = (latency_req_ms - elapsed_time_ms) * MS_TO_S
+        
+        # Calculate remaining PRBs needed
+        total_prbs_needed = (self.ue_pending_requests[ue_rnti][earliest_req_id] + BYTES_PER_PRB - 1) // BYTES_PER_PRB
+        prbs_allocated = self.request_prb_allocations[ue_rnti].get(earliest_req_id, 0)
+        remaining_prbs = max(0, total_prbs_needed - prbs_allocated)
+        
+        # Calculate priority using exponential decay and remaining PRBs
+        priority = remaining_prbs * math.exp(-1 * time_to_deadline_s)
+        print(f"Accelerate calculation for RNTI {ue_rnti}:")
+        print(f"  Time to deadline: {time_to_deadline_s:.3f}s")
+        print(f"  Remaining PRBs: {remaining_prbs}")
+        print(f"  Priority: {priority}")
+        return priority
+
+    def _update_priorities(self):
+        """Update priorities based on request timers and latency requirements"""
+        print("Priority update thread started")
+        while self.running:
+            try:
+                for rnti in list(self.request_timers.keys()):
+                    # Initialize priority if not exists
+                    if rnti not in self.ue_priorities:
+                        self._initialize_ue_priority(rnti)
+                        
+                    requests = self.request_timers[rnti]
+                    if not requests:  # No requests for this UE
+                        print(f"No requests for RNTI {rnti}, resetting priority")
+                        self.reset_priority(rnti)
+                        continue
+                    
+                    # Get UE's latency requirement
+                    latency_req = self.ue_info[rnti]['latency_req']
+                    incentive_threshold = latency_req / 2  # First half for incentive mode
+                    
+                    # Find earliest request
+                    earliest_req_id = min(requests.items(), key=lambda x: x[1])[0]
+                    timer = requests[earliest_req_id]
+                    
+                    # Calculate priority based on current state
+                    if timer < incentive_threshold:
+                        priority = self._calculate_incentive_priority(rnti)
+                    elif timer < latency_req:
+                        priority = self._calculate_accelerate_priority(rnti)
+                    else:
+                        priority = 100
+                    
+                    # Update priority state and scheduler
+                    self.ue_priorities[rnti] = priority
+                    self.set_priority(rnti, priority)
+                    
+                    # Debug output
+                    if timer % 100 == 0:  # Print every 100ms
+                        print(f"RNTI {rnti} - Request {earliest_req_id} - "
+                              f"Timer {timer}ms/{latency_req}ms - Priority {priority}")
+                    
+                time.sleep(0.001)  # 1ms update interval
+                
+            except Exception as e:
+                print(f"Error updating priorities: {e}")
+
+    def _update_prb_history(self, rnti: str, slot: int, prbs: int):
+        """Update PRB history and track PRB allocations for earliest active request"""
+        # Initialize history for new UE if needed
+        if rnti not in self.prb_history:
+            self.prb_history[rnti] = {}
+            # Fill with zeros for all known slots
+            for s in self.slot_history:
+                self.prb_history[rnti][s] = 0
+        
+        # If this is a new slot we haven't seen before
+        if slot not in self.slot_history:
+            self.slot_history.append(slot)
+            
+            # Add zero entries for this slot for all UEs
+            for ue_rnti in self.prb_history:
+                self.prb_history[ue_rnti][slot] = 0
+            
+            # Remove oldest slots if we're beyond window size
+            while len(self.slot_history) > self.HISTORY_WINDOW:
+                oldest_slot = self.slot_history.pop(0)
+                # Remove this slot from all UE histories
+                for ue_rnti in self.prb_history:
+                    self.prb_history[ue_rnti].pop(oldest_slot, None)
+        
+        # Update the PRB allocation for this UE and slot
+        self.prb_history[rnti][slot] = prbs
+        
+        # Update PRB allocation for earliest active request
+        if rnti in self.request_timers and self.request_timers[rnti]:
+            # Initialize allocation tracking if needed
+            if rnti not in self.request_prb_allocations:
+                self.request_prb_allocations[rnti] = {}
+            
+            # Get earliest request ID
+            earliest_req_id = min(self.request_timers[rnti].items(), key=lambda x: x[1])[0]
+            
+            # Initialize or update PRB allocation for this request
+            if earliest_req_id not in self.request_prb_allocations[rnti]:
+                self.request_prb_allocations[rnti][earliest_req_id] = 0
+            self.request_prb_allocations[rnti][earliest_req_id] += prbs
+            
+            # Debug output
+            print(f"Earliest Request {earliest_req_id} for RNTI {rnti} - "
+                  f"Total allocated PRBs: {self.request_prb_allocations[rnti][earliest_req_id]}")
 
 def main():
     controller = TuttiController()
