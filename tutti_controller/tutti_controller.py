@@ -44,8 +44,8 @@ class TuttiController:
         # Track latest PRB allocation and slot for each UE
         self.ue_prb_status: Dict[str, tuple] = {}  # RNTI -> (slot, prbs)
         
-        # Track request timers (elapsed time in ms)
-        self.request_timers: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> elapsed_ms}
+        # Change request_timers to store start timestamps
+        self.request_start_times: Dict[str, Dict[int, float]] = {}  # RNTI -> {request_id -> start_timestamp}
         
         # Track UE priority states
         self.ue_priorities: Dict[str, float] = {}  # RNTI -> current_priority
@@ -58,12 +58,9 @@ class TuttiController:
         # Track allocated PRBs for each request
         self.request_prb_allocations: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> total_allocated_prbs}
         
-        # Start timer update thread
-        threading.Thread(target=self._update_request_timers, daemon=True).start()
-        
         # Start priority update thread
-        self.priority_thread = threading.Thread(target=self._update_priorities)
-        self.priority_thread.start()
+        # self.priority_thread = threading.Thread(target=self._update_priorities)
+        # self.priority_thread.start()
 
     def start(self):
         """Start the controller and all its connections"""
@@ -137,7 +134,7 @@ class TuttiController:
                         # Initialize resource tracking for new UE
                         self.ue_resource_needs[rnti] = 0
                         self.ue_pending_requests[rnti] = {}
-                        self.request_timers[rnti] = {}
+                        self.request_start_times[rnti] = {}
 
                     elif msg_type == "REQUEST":
                         # Format: "REQUEST|RNTI|SEQ_NUM"
@@ -152,12 +149,10 @@ class TuttiController:
                             self.ue_resource_needs[rnti] += request_size
                             self.ue_pending_requests[rnti][seq_num] = request_size
 
-                            # print(f"New request {seq_num} for RNTI {rnti}:")
-                            # print(f"  Request size: {request_size} bytes")
-                            # print(f"  Total resource need: {self.ue_resource_needs[rnti]} bytes")
-                            # print(f"  Pending requests: {len(self.ue_pending_requests[rnti])}")
-                            # Initialize timer for new request
-                            self.request_timers[rnti][seq_num] = 0
+                            # Store request start time
+                            if rnti not in self.request_start_times:
+                                self.request_start_times[rnti] = {}
+                            self.request_start_times[rnti][seq_num] = time.time()
                         else:
                             print(f"Warning: Request for unknown RNTI {rnti}")
 
@@ -166,23 +161,20 @@ class TuttiController:
                         _, rnti, seq_num = msg_parts
                         seq_num = int(seq_num)
                         
-                        # Handle request timer
-                        if rnti in self.request_timers and seq_num in self.request_timers[rnti]:
-                            # final_time = self.request_timers[rnti][seq_num]
-                            # print(f"Request {seq_num} from RNTI {rnti} completed in {final_time}ms")
-                            del self.request_timers[rnti][seq_num]
+                        # Calculate final processing time
+                        if rnti in self.request_start_times and seq_num in self.request_start_times[rnti]:
+                            start_time = self.request_start_times[rnti][seq_num]
+                            elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
+                            print(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms")
+                            del self.request_start_times[rnti][seq_num]
                         
                         # Handle resource tracking
                         if rnti in self.ue_pending_requests and seq_num in self.ue_pending_requests[rnti]:
                             completed_size = self.ue_pending_requests[rnti][seq_num]
                             self.ue_resource_needs[rnti] -= completed_size
                             del self.ue_pending_requests[rnti][seq_num]
-                            # print(f"Request {seq_num} completed for RNTI {rnti}:")
-                            # print(f"  Freed resources: {completed_size} bytes")
-                            # print(f"  Remaining resource need: {self.ue_resource_needs[rnti]} bytes")
-                            # print(f"  Remaining requests: {len(self.ue_pending_requests[rnti])}")
                         
-                        if rnti not in self.request_timers and rnti not in self.ue_pending_requests:
+                        if rnti not in self.request_start_times and rnti not in self.ue_pending_requests:
                             print(f"Warning: Completion for unknown RNTI {rnti}")
 
                 except Exception as e:
@@ -266,7 +258,7 @@ class TuttiController:
             msg = struct.pack('=5sdb', rnti_str, priority, False)
             
             # Debug output
-            print(f"Setting priority for RNTI {rnti} to {priority}")
+            # print(f"Setting priority for RNTI {rnti} to {priority}")
             # print(f"Message bytes: {[hex(x) for x in msg]}")
             
             self.ran_control_socket.send(msg)
@@ -305,22 +297,6 @@ class TuttiController:
         self.ran_metrics_socket.close()
         self.ran_control_socket.close()
 
-    def _update_request_timers(self):
-        """Update timers for all active requests"""
-        print("Timer update thread started")  # Debug: Confirm thread start
-        update_count = 0
-        while self.running:
-            try:
-                for rnti in list(self.request_timers.keys()):
-                    for req_id in list(self.request_timers[rnti].keys()):
-                        self.request_timers[rnti][req_id] += 1
-                        if update_count % 1000 == 0:  # Print every 1000 updates
-                            print(f"Timer update: RNTI {rnti}, Request {req_id}, Value {self.request_timers[rnti][req_id]}ms")
-                update_count += 1
-                time.sleep(0.001)
-            except Exception as e:
-                print(f"Error updating request timers: {e}")
-
     def _initialize_ue_priority(self, rnti: str):
         """Initialize priority for a new UE"""
         self.ue_priorities[rnti] = 0.0
@@ -336,11 +312,11 @@ class TuttiController:
         ue_prb_requirements = {}  # rnti -> (total_prbs, prbs_per_tti)
         
         # Calculate for each UE with active requests
-        for rnti in self.request_timers.keys():
-            if not self.request_timers[rnti]:
+        for rnti in self.request_start_times.keys():
+            if not self.request_start_times[rnti]:
                 continue
                 
-            earliest_req_id = min(self.request_timers[rnti].items(), key=lambda x: x[1])[0]
+            earliest_req_id = min(self.request_start_times[rnti].items(), key=lambda x: x[1])[0]
             request_size = self.ue_pending_requests[rnti][earliest_req_id]
             total_prbs = (request_size + BYTES_PER_PRB - 1) // BYTES_PER_PRB
             latency_req = self.ue_info[rnti]['latency_req']
@@ -380,12 +356,13 @@ class TuttiController:
         MS_TO_S = 0.001  # Convert ms to s
         
         # Get current request info
-        if not self.request_timers[ue_rnti]:
+        if not self.request_start_times[ue_rnti]:
             return 0.0
             
         # Get earliest request and its timer
-        earliest_req_id = min(self.request_timers[ue_rnti].items(), key=lambda x: x[1])[0]
-        elapsed_time_ms = self.request_timers[ue_rnti][earliest_req_id]
+        earliest_req_id = min(self.request_start_times[ue_rnti].items(), key=lambda x: x[1])[0]
+        start_time = self.request_start_times[ue_rnti][earliest_req_id]
+        elapsed_time_ms = (time.time() - start_time) * 1000
         latency_req_ms = self.ue_info[ue_rnti]['latency_req']
         
         # Calculate time to deadline in seconds
@@ -409,29 +386,34 @@ class TuttiController:
         print("Priority update thread started")
         while self.running:
             try:
-                for rnti in list(self.request_timers.keys()):
+                current_time = time.time()
+                for rnti in list(self.request_start_times.keys()):
+                    # Skip if we don't have UE info yet
+                    if rnti not in self.ue_info:
+                        print(f"Waiting for UE info for RNTI {rnti}")
+                        continue
+                        
                     # Initialize priority if not exists
                     if rnti not in self.ue_priorities:
                         self._initialize_ue_priority(rnti)
                         
-                    requests = self.request_timers[rnti]
+                    requests = self.request_start_times[rnti]
                     if not requests:  # No requests for this UE
-                        # print(f"No requests for RNTI {rnti}, resetting priority")
                         self.reset_priority(rnti)
                         continue
                     
                     # Get UE's latency requirement
                     latency_req = self.ue_info[rnti]['latency_req']
-                    incentive_threshold = latency_req / 2  # First half for incentive mode
+                    incentive_threshold = latency_req / 2
                     
-                    # Find earliest request
+                    # Find earliest request and calculate its elapsed time
                     earliest_req_id = min(requests.items(), key=lambda x: x[1])[0]
-                    timer = requests[earliest_req_id]
+                    elapsed_time_ms = (current_time - requests[earliest_req_id]) * 1000
                     
                     # Calculate priority based on current state
-                    if timer < incentive_threshold:
+                    if elapsed_time_ms < incentive_threshold:
                         priority = self._calculate_incentive_priority(rnti)
-                    elif timer < latency_req:
+                    elif elapsed_time_ms < latency_req:
                         priority = self._calculate_accelerate_priority(rnti)
                     else:
                         priority = 100
@@ -440,15 +422,12 @@ class TuttiController:
                     self.ue_priorities[rnti] = priority
                     self.set_priority(rnti, priority)
                     
-                    # Debug output
-                    if timer % 100 == 0:  # Print every 100ms
-                        print(f"RNTI {rnti} - Request {earliest_req_id} - "
-                              f"Timer {timer}ms/{latency_req}ms - Priority {priority}")
-                    
                 time.sleep(0.001)  # 1ms update interval
                 
             except Exception as e:
                 print(f"Error updating priorities: {e}")
+                import traceback
+                traceback.print_exc()
 
     def _update_prb_history(self, rnti: str, slot: int, prbs: int):
         """Update PRB history and track PRB allocations for earliest active request"""
@@ -478,13 +457,13 @@ class TuttiController:
         self.prb_history[rnti][slot] = prbs
         
         # Update PRB allocation for earliest active request
-        if rnti in self.request_timers and self.request_timers[rnti]:
+        if rnti in self.request_start_times and self.request_start_times[rnti]:
             # Initialize allocation tracking if needed
             if rnti not in self.request_prb_allocations:
                 self.request_prb_allocations[rnti] = {}
             
             # Get earliest request ID
-            earliest_req_id = min(self.request_timers[rnti].items(), key=lambda x: x[1])[0]
+            earliest_req_id = min(self.request_start_times[rnti].items(), key=lambda x: x[1])[0]
             
             # Initialize or update PRB allocation for this request
             if earliest_req_id not in self.request_prb_allocations[rnti]:
@@ -492,8 +471,8 @@ class TuttiController:
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
             
             # Debug output
-            print(f"Earliest Request {earliest_req_id} for RNTI {rnti} - "
-                  f"Total allocated PRBs: {self.request_prb_allocations[rnti][earliest_req_id]}")
+            # print(f"Earliest Request {earliest_req_id} for RNTI {rnti} - "
+            #       f"Total allocated PRBs: {self.request_prb_allocations[rnti][earliest_req_id]}")
 
 def main():
     controller = TuttiController()
