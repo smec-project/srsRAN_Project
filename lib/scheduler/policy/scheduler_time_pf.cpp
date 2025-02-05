@@ -561,7 +561,9 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   // Get offset from ul_priorities if it exists, otherwise use 0
   double offset = (it != parent->ul_priorities.end()) ? it->second : 0;
   ul_prio = rate_weight * pf_weight + offset;
-  // std::cout << "UL priority for UE " << ss.str() << ": " <<  rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
+  if (offset != 0) {
+    std::cout << "UL priority for UE " << ss.str() << ": " <<  rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
+  }
   sr_ind_received = u.has_pending_sr();
 }
 
