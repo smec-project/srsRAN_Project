@@ -58,7 +58,10 @@ class TuttiController:
         # Track allocated PRBs for each request
         self.request_prb_allocations: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> total_allocated_prbs}
         
-        # Start priority update thread
+        # Open log file first
+        self.log_file = open('controller.txt', 'w')
+
+        # Then start priority update thread
         self.priority_thread = threading.Thread(target=self._update_priorities)
         self.priority_thread.start()
 
@@ -71,7 +74,8 @@ class TuttiController:
             self.ran_metrics_socket.connect((self.ran_metrics_ip, self.ran_metrics_port))
             self.ran_control_socket.connect((self.ran_control_ip, self.ran_control_port))
         except Exception as e:
-            print(f"Failed to connect to RAN services: {e}")
+            self.log_file.write(f"Failed to connect to RAN services: {e}\n")
+            self.log_file.flush()
             return False
 
         # Start threads for different functionalities
@@ -85,7 +89,8 @@ class TuttiController:
         while self.running:
             try:
                 conn, addr = self.app_socket.accept()
-                print(f"New application connected from {addr}")
+                self.log_file.write(f"New application connected from {addr}\n")
+                self.log_file.flush()
                 self.app_connections[addr[0]] = conn
                 threading.Thread(
                     target=self._handle_app_messages,
@@ -93,7 +98,8 @@ class TuttiController:
                     daemon=True
                 ).start()
             except Exception as e:
-                print(f"Error accepting application connection: {e}")
+                self.log_file.write(f"Error accepting application connection: {e}\n")
+                self.log_file.flush()
 
     def _handle_app_messages(self, conn: socket.socket, addr):
         """Handle messages from a specific application connection"""
@@ -105,7 +111,8 @@ class TuttiController:
             
             app_id = data.decode('utf-8').strip()
             self.app_connections[app_id] = conn
-            print(f"Application {app_id} registered from {addr}")
+            self.log_file.write(f"Application {app_id} registered from {addr}\n")
+            self.log_file.flush()
             
             while self.running:
                 try:
@@ -128,8 +135,9 @@ class TuttiController:
                             'request_size': int(request_size)
                         }
                         self.request_sequences[rnti] = []
-                        print(f"New UE registered - RNTI: {rnti}, UE_IDX: {ue_idx}, "
-                              f"Latency Req: {latency_req}ms, Size: {request_size} bytes")
+                        self.log_file.write(f"New UE registered - RNTI: {rnti}, UE_IDX: {ue_idx}, "
+                              f"Latency Req: {latency_req}ms, Size: {request_size} bytes\n")
+                        self.log_file.flush()
                         # Initialize resource tracking for new UE
                         self.ue_resource_needs[rnti] = 0
                         self.ue_pending_requests[rnti] = {}
@@ -153,7 +161,8 @@ class TuttiController:
                                 self.request_start_times[rnti] = {}
                             self.request_start_times[rnti][seq_num] = time.time()
                         else:
-                            print(f"Warning: Request for unknown RNTI {rnti}")
+                            self.log_file.write(f"Warning: Request for unknown RNTI {rnti}\n")
+                            self.log_file.flush()
 
                     elif msg_type == "DONE":
                         # Format: "DONE|RNTI|SEQ_NUM"
@@ -162,9 +171,10 @@ class TuttiController:
                         
                         # Calculate final processing time
                         if rnti in self.request_start_times and seq_num in self.request_start_times[rnti]:
-                            # start_time = self.request_start_times[rnti][seq_num]
-                            # elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
-                            # print(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms")
+                            start_time = self.request_start_times[rnti][seq_num]
+                            elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
+                            self.log_file.write(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms\n")
+                            self.log_file.flush()
                             del self.request_start_times[rnti][seq_num]
                         
                         # Handle resource tracking
@@ -174,10 +184,12 @@ class TuttiController:
                             del self.ue_pending_requests[rnti][seq_num]
                         
                         if rnti not in self.request_start_times and rnti not in self.ue_pending_requests:
-                            print(f"Warning: Completion for unknown RNTI {rnti}")
+                            self.log_file.write(f"Warning: Completion for unknown RNTI {rnti}\n")
+                            self.log_file.flush()
 
                 except Exception as e:
-                    print(f"Error processing application message: {e}")
+                    self.log_file.write(f"Error processing application message: {e}\n")
+                    self.log_file.flush()
                     break
                     
         finally:
@@ -211,18 +223,17 @@ class TuttiController:
                     
                     # Update latest PRB allocation and slot
                     self.ue_prb_status[rnti] = (slot, prbs)
-                    # print(f"Updated PRB status for RNTI {rnti}: Slot {slot}, PRBs {prbs}")
                 
                 self.current_metrics = metrics
                 
                 # Update PRB history when receiving new metrics
                 for rnti, metrics in self.current_metrics.items():
-                    # print(f"Received metrics for RNTI {rnti}: {metrics}")
                     if 'SLOT' in metrics and 'PRBs' in metrics:
                         self._update_prb_history(rnti, metrics['SLOT'], metrics['PRBs'])
                 
             except Exception as e:
-                print(f"Error receiving RAN metrics: {e}")
+                self.log_file.write(f"Error receiving RAN metrics: {e}\n")
+                self.log_file.flush()
 
     def set_priority(self, rnti: str, priority: float):
         """Send priority update to RAN"""
@@ -231,14 +242,11 @@ class TuttiController:
             rnti_str = f"{rnti:<4}".encode('ascii')  # Left align, space pad to 4 chars
             msg = struct.pack('=5sdb', rnti_str, priority, False)
             
-            # Debug output
-            # print(f"Setting priority for RNTI {rnti} to {priority}")
-            # print(f"Message bytes: {[hex(x) for x in msg]}")
-            
             self.ran_control_socket.send(msg)
             return True
         except Exception as e:
-            print(f"Failed to send priority update: {e}")
+            self.log_file.write(f"Failed to send priority update: {e}\n")
+            self.log_file.flush()
             return False
 
     def reset_priority(self, rnti: str):
@@ -252,10 +260,10 @@ class TuttiController:
             rnti_str = f"{rnti:<4}".encode('ascii')
             msg = struct.pack('=5sdb', rnti_str, 0.0, True)
             self.ran_control_socket.send(msg)
-            # print(f"Reset priority for RNTI {rnti}")
             return True
         except Exception as e:
-            print(f"Failed to reset priority: {e}")
+            self.log_file.write(f"Failed to reset priority: {e}\n")
+            self.log_file.flush()
             return False
 
     def stop(self):
@@ -307,6 +315,8 @@ class TuttiController:
         priority_adjustments = {}
         for rnti, (_, required_prbs_per_tti) in ue_prb_requirements.items():
             if rnti not in self.prb_history:
+                self.log_file.write(f"Warning: No PRB history for RNTI {rnti}\n")
+                self.log_file.flush()
                 return DEFAULT_PRIORITY_OFFSET
             actual_prbs = self.prb_history[rnti][latest_slot]
             prb_difference = actual_prbs - required_prbs_per_tti
@@ -320,9 +330,11 @@ class TuttiController:
         else:
             actual_prbs = self.prb_history[ue_rnti][latest_slot]
             if actual_prbs > 0:
-                current_offset = self.ue_priorities[ue_rnti] + max(DEFAULT_PRIORITY_OFFSET, abs(actual_prbs - ue_prb_requirements[ue_rnti][0])/actual_prbs)
+                current_offset = self.ue_priorities[ue_rnti] + max(DEFAULT_PRIORITY_OFFSET, abs(actual_prbs - ue_prb_requirements[ue_rnti][1])/actual_prbs)
             else:
-                current_offset = self.ue_priorities[ue_rnti] + DEFAULT_PRIORITY_OFFSET
+                current_offset = self.ue_priorities[ue_rnti] + abs(actual_prbs - ue_prb_requirements[ue_rnti][1])
+        self.log_file.write(f"incentive {ue_rnti} {actual_prbs} {ue_prb_requirements[ue_rnti][1]} {current_offset}\n")
+        self.log_file.flush()  # Ensure immediate write
         return current_offset
 
     def _calculate_accelerate_priority(self, ue_rnti: str) -> float:
@@ -355,25 +367,22 @@ class TuttiController:
         remaining_prbs = max(0, total_prbs_needed - prbs_allocated)
         
         # Calculate priority using exponential decay and remaining PRBs
-        priority = remaining_prbs * math.exp(-1 * time_to_deadline_s)
-        
-        print(f"Accelerate calculation for RNTI {ue_rnti} req_id {earliest_req_id}:")
-        print(f"  Time to deadline: {time_to_deadline_s:.3f}s")
-        print(f"  Remaining PRBs: {remaining_prbs}")
-        print(f"  Priority: {priority}")
-        
+        priority = self.ue_priorities[ue_rnti] + remaining_prbs * math.exp(-1 * time_to_deadline_s)
+        self.log_file.write(f"accelerate {ue_rnti} {prbs_allocated} {total_prbs_needed} {time_to_deadline_s} {priority}\n")
+        self.log_file.flush()
         return priority
 
     def _update_priorities(self):
         """Update priorities based on request timers and latency requirements"""
-        print("Priority update thread started")
+        self.log_file.write("Priority update thread started\n")
+        self.log_file.flush()
         while self.running:
             try:
                 current_time = time.time()
                 for rnti in list(self.request_start_times.keys()):
                     # Skip if we don't have UE info yet
                     if rnti not in self.ue_info:
-                        print(f"Waiting for UE info for RNTI {rnti}")
+                        self.log_file.write(f"Waiting for UE info for RNTI {rnti}\n")
                         continue
                         
                     # Initialize priority if not exists
@@ -382,8 +391,7 @@ class TuttiController:
                         
                     requests = self.request_start_times[rnti]
                     if not requests:  # No requests for this UE
-                        # self.reset_priority(rnti)
-                        # print(f"Reset priority for RNTI {rnti}")
+                        self.reset_priority(rnti)
                         continue
                     
                     # Get UE's latency requirement
@@ -400,7 +408,7 @@ class TuttiController:
                     elif elapsed_time_ms < latency_req:
                         priority = self._calculate_accelerate_priority(rnti)
                     else:
-                        priority = 100
+                        priority = 10000
                     
                     # Update priority state and scheduler
                     self.ue_priorities[rnti] = priority
@@ -409,9 +417,8 @@ class TuttiController:
                 time.sleep(0.001)  # 1ms update interval
                 
             except Exception as e:
-                print(f"Error updating priorities: {e}")
-                import traceback
-                traceback.print_exc()
+                self.log_file.write(f"Error updating priorities: {e}\n")
+                self.log_file.flush()
 
     def _update_prb_history(self, rnti: str, slot: int, prbs: int):
         """Update PRB history and track PRB allocations for earliest active request"""
@@ -453,10 +460,11 @@ class TuttiController:
             if earliest_req_id not in self.request_prb_allocations[rnti]:
                 self.request_prb_allocations[rnti][earliest_req_id] = 0
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
-            
-            # Debug output
-            # print(f"Earliest Request {earliest_req_id} for RNTI {rnti} - "
-            #       f"Total allocated PRBs: {self.request_prb_allocations[rnti][earliest_req_id]}")
+
+    def __del__(self):
+        # Ensure file is properly closed
+        if hasattr(self, 'log_file'):
+            self.log_file.close()
 
 def main():
     controller = TuttiController()

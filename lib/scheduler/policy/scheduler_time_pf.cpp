@@ -572,8 +572,10 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
       u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
   
   ul_prio = rate_weight * pf_weight + offset;
-  std::cout << "UL priority for UE 0x" << std::hex << rnti_val << std::dec << ": " 
-            << rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
+  // if (offset != 0) {
+  //   std::cout << "UL priority for UE 0x" << std::hex << rnti_val << std::dec << ": " 
+  //             << rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
+  // }
   sr_ind_received = u.has_pending_sr();
 }
 
@@ -719,7 +721,7 @@ void scheduler_time_pf::handle_priority_messages()
                 std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
                 if (msg.is_reset) {
                     scheduler_time_pf::ul_priorities.erase(rnti_val);
-                    std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
+                    // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
                 } else {
                     scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
                     std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val 
