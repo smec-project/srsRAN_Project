@@ -216,36 +216,14 @@ class TuttiController:
                 if not data:
                     continue
                 
-                # Parse the metrics string
-                metrics = {}
                 for line in data.strip().split('\n'):
                     values = dict(item.split('=') for item in line.split(','))
-                    # Keep RNTI as string
-                    rnti = values['RNTI'][-4:]  # Just take last 4 chars
-                    ue_idx = values['UE_IDX']
-                    slot = int(values['SLOT'])
-                    prbs = int(values['PRBs'])
+                    msg_type = values['TYPE']
                     
-                    # Update UE_IDX <-> RNTI mapping
-                    self.ue_idx_to_rnti[ue_idx] = rnti
-                    self.rnti_to_ue_idx[rnti] = ue_idx
-                    
-                    # Store basic metrics
-                    metrics[rnti] = {
-                        'UE_IDX': ue_idx,
-                        'PRBs': prbs,
-                        'SLOT': slot
-                    }
-                    
-                    # Update latest PRB allocation and slot
-                    self.ue_prb_status[rnti] = (slot, prbs)
-                
-                self.current_metrics = metrics
-                
-                # Update PRB history when receiving new metrics
-                for rnti, metrics in self.current_metrics.items():
-                    if 'SLOT' in metrics and 'PRBs' in metrics:
-                        self._update_prb_history(rnti, metrics['SLOT'], metrics['PRBs'])
+                    if msg_type == 'PRB':
+                        self._handle_prb_metrics(values)
+                    elif msg_type == 'SR':
+                        self._handle_sr_metrics(values)
                 
             except Exception as e:
                 self.log_file.write(f"Error receiving RAN metrics: {e}\n")
@@ -494,6 +472,40 @@ class TuttiController:
             if earliest_req_id not in self.request_prb_allocations[rnti]:
                 self.request_prb_allocations[rnti][earliest_req_id] = 0
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
+
+    def _handle_prb_metrics(self, values):
+        """Handle PRB allocation metrics"""
+        # Keep RNTI as string
+        rnti = values['RNTI'][-4:]  # Just take last 4 chars
+        ue_idx = values['UE_IDX']
+        slot = int(values['SLOT'])
+        prbs = int(values['PRBs'])
+        
+        # Update UE_IDX <-> RNTI mapping
+        self.ue_idx_to_rnti[ue_idx] = rnti
+        self.rnti_to_ue_idx[rnti] = ue_idx
+        
+        # Store basic metrics
+        self.current_metrics[rnti] = {
+            'UE_IDX': ue_idx,
+            'PRBs': prbs,
+            'SLOT': slot
+        }
+        
+        # Update latest PRB allocation and slot
+        self.ue_prb_status[rnti] = (slot, prbs)
+        self.log_file.write(f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs}\n")
+        self.log_file.flush()
+        
+        # Update PRB history
+        self._update_prb_history(rnti, slot, prbs)
+
+    def _handle_sr_metrics(self, values):
+        """Handle SR indication metrics"""
+        rnti = values['RNTI'][-4:]  # Just take last 4 chars
+        slot = int(values['SLOT'])
+        self.log_file.write(f"SR received from RNTI=0x{rnti}, slot={slot}\n")
+        self.log_file.flush()
 
     def __del__(self):
         """Ensure sockets are closed when object is destroyed"""

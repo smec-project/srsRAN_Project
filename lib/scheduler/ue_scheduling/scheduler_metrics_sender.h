@@ -39,12 +39,28 @@
 
 namespace srsran {
 
-/// Structure to hold UE scheduling metrics
-struct ue_scheduling_metrics {
+// Define message types
+enum class metrics_type {
+    PRB_ALLOC,  // PRB allocation metrics
+    SR_IND      // SR indication
+};
+
+// Base metrics structure
+struct base_metrics {
+    metrics_type type;
     du_ue_index_t ue_index;
-    rnti_t        crnti;
-    unsigned      nof_prbs;
-    slot_point    slot;
+    rnti_t crnti;
+};
+
+// PRB allocation metrics
+struct prb_metrics : public base_metrics {
+    unsigned nof_prbs;
+    slot_point slot;
+};
+
+// SR indication metrics
+struct sr_metrics : public base_metrics {
+    slot_point slot;
 };
 
 /// \brief Class responsible for sending scheduler metrics over TCP connection.
@@ -53,7 +69,20 @@ class scheduler_metrics_sender
 public:
     static constexpr int DEFAULT_METRICS_PORT = 5556;
     
+    static scheduler_metrics_sender& instance() {
+        static scheduler_metrics_sender instance;
+        return instance;
+    }
+    
+    // Delete copy/move constructors
+    scheduler_metrics_sender(const scheduler_metrics_sender&) = delete;
+    scheduler_metrics_sender& operator=(const scheduler_metrics_sender&) = delete;
+    
+private:
+    // Private constructor
     scheduler_metrics_sender();
+    
+public:
     ~scheduler_metrics_sender() { stop(); }
 
     /// \brief Initialize the TCP server.
@@ -65,17 +94,19 @@ public:
     void stop();
 
     /// \brief Send UE scheduling metrics to connected client.
-    /// \param[in] metrics UE scheduling metrics to send.
+    /// \param[in] msg Message to send.
     /// \return True if message was sent successfully, false otherwise.
-    bool send_metrics(const ue_scheduling_metrics& metrics);
-
     bool send_message(const std::string& msg);
+
+    bool send_prb_metrics(const prb_metrics& metrics);
+    bool send_sr_metrics(const sr_metrics& metrics);
 
 private:
     /// \brief Format metrics into JSON string.
     /// \param[in] metrics UE scheduling metrics to format.
     /// \return Formatted JSON string.
-    std::string format_metrics(const ue_scheduling_metrics& metrics);
+    std::string format_prb_metrics(const prb_metrics& metrics);
+    std::string format_sr_metrics(const sr_metrics& metrics);
 
     /// \brief Thread function to handle incoming connections.
     void accept_connections();

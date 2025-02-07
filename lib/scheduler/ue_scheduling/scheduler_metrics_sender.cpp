@@ -145,17 +145,31 @@ bool scheduler_metrics_sender::send_message(const std::string& msg)
     return true;
 }
 
-std::string scheduler_metrics_sender::format_metrics(const ue_scheduling_metrics& metrics)
+std::string scheduler_metrics_sender::format_prb_metrics(const prb_metrics& metrics)
 {
-    return fmt::format("UE_IDX={},RNTI={:#6x},PRBs={},SLOT={}\n", 
+    return fmt::format("TYPE=PRB,UE_IDX={},RNTI={:#6x},PRBs={},SLOT={}\n", 
                       metrics.ue_index,
                       (unsigned)metrics.crnti,
                       metrics.nof_prbs,
                       metrics.slot.to_uint());
 }
 
-bool scheduler_metrics_sender::send_metrics(const ue_scheduling_metrics& metrics)
+std::string scheduler_metrics_sender::format_sr_metrics(const sr_metrics& metrics)
 {
-    std::string msg = format_metrics(metrics);
+    return fmt::format("TYPE=SR,UE_IDX={},RNTI={:#6x},SLOT={}\n",
+                      metrics.ue_index,
+                      (unsigned)metrics.crnti,
+                      metrics.slot.to_uint());
+}
+
+bool scheduler_metrics_sender::send_prb_metrics(const prb_metrics& metrics)
+{
+    std::string msg = format_prb_metrics(metrics);
+    return send_message(msg);
+}
+
+bool scheduler_metrics_sender::send_sr_metrics(const sr_metrics& metrics)
+{
+    std::string msg = format_sr_metrics(metrics);
     return send_message(msg);
 } 

@@ -39,6 +39,7 @@ class uci_scheduler_impl;
 class cell_harq_manager;
 class srs_scheduler;
 class pdu_indication_pool;
+class scheduler_metrics_sender;
 
 struct cell_creation_event {
   cell_resource_allocator& cell_res_grid;

@@ -29,7 +29,6 @@
 #include "../uci_scheduling/uci_scheduler.h"
 #include "ue_repository.h"
 #include "srsran/scheduler/config/scheduler_expert_config.h"
-#include "scheduler_metrics_sender.h"
 
 namespace srsran {
 
@@ -90,8 +89,6 @@ private:
 
   // Number of allocation attempts for DL and UL in the given slot.
   unsigned dl_attempts_count = 0, ul_attempts_count = 0;
-
-  scheduler_metrics_sender metrics_sender;
 };
 
 /// This class implements the ue_pdsch_allocator interface and updates a DL slice candidate with the allocated RBs if

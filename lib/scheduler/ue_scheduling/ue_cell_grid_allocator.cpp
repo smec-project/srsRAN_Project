@@ -44,7 +44,7 @@ ue_cell_grid_allocator::ue_cell_grid_allocator(const scheduler_ue_expert_config&
                                                srslog::basic_logger&             logger_) :
   expert_cfg(expert_cfg_), ues(ues_), logger(logger_)
 {
-    if (metrics_sender.init(5556)) {
+    if (scheduler_metrics_sender::instance().init(5556)) {
         srslog::fetch_basic_logger("SCHED").info("Metrics sender initialized on port 5556");
         std::cout << "Metrics sender initialized on port 5556" << std::endl;
     }
@@ -1031,8 +1031,14 @@ ue_cell_grid_allocator::allocate_ul_grant(const ue_pusch_grant& grant, ran_slice
     //           << " (RNTI=0x" << std::hex << to_value(u.crnti) << std::dec << ")"
     //           << ", slot=" << pusch_alloc.slot.to_uint() << std::endl;
     if (crbs.length() > 0) {
-      ue_scheduling_metrics metrics{u.ue_index, u.crnti, (unsigned)crbs.length(), pusch_alloc.slot};
-      metrics_sender.send_metrics(metrics);
+      prb_metrics metrics{
+          metrics_type::PRB_ALLOC,
+          u.ue_index,
+          u.crnti,
+          (unsigned)crbs.length(),
+          pusch_alloc.slot
+      };
+      scheduler_metrics_sender::instance().send_prb_metrics(metrics);
     }
 
     h_ul->save_grant_params(pusch_sched_ctx, msg.pusch_cfg);
