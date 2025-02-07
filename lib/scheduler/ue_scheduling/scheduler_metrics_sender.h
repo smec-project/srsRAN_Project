@@ -42,7 +42,8 @@ namespace srsran {
 // Define message types
 enum class metrics_type {
     PRB_ALLOC,  // PRB allocation metrics
-    SR_IND      // SR indication
+    SR_IND,      // SR indication
+    BSR_IND      // BSR indication
 };
 
 // Base metrics structure
@@ -61,6 +62,11 @@ struct prb_metrics : public base_metrics {
 // SR indication metrics
 struct sr_metrics : public base_metrics {
     slot_point slot;
+};
+
+// BSR metrics
+struct bsr_metrics : public base_metrics {
+    unsigned nof_bytes;  // Total buffer size in bytes
 };
 
 /// \brief Class responsible for sending scheduler metrics over TCP connection.
@@ -100,6 +106,7 @@ public:
 
     bool send_prb_metrics(const prb_metrics& metrics);
     bool send_sr_metrics(const sr_metrics& metrics);
+    bool send_bsr_metrics(const bsr_metrics& metrics);
 
 private:
     /// \brief Format metrics into JSON string.
@@ -107,6 +114,7 @@ private:
     /// \return Formatted JSON string.
     std::string format_prb_metrics(const prb_metrics& metrics);
     std::string format_sr_metrics(const sr_metrics& metrics);
+    std::string format_bsr_metrics(const bsr_metrics& metrics);
 
     /// \brief Thread function to handle incoming connections.
     void accept_connections();

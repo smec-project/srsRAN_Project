@@ -22,6 +22,7 @@
 
 #include "srsran_scheduler_adapter.h"
 #include "srsran/scheduler/scheduler_factory.h"
+#include "../../scheduler/ue_scheduling/scheduler_metrics_sender.h"
 
 using namespace srsran;
 
@@ -159,6 +160,20 @@ void srsran_scheduler_adapter::handle_ul_bsr_indication(const mac_bsr_ce_info& b
       ul_bsr_ind.reported_lcgs.push_back(make_sched_lcg_report(lb, bsr.bsr_fmt));
     }
   }
+
+  // Send BSR metrics
+  unsigned total_bytes = 0;
+  for (const auto& lcg_report : ul_bsr_ind.reported_lcgs) {
+    total_bytes += lcg_report.nof_bytes;
+  }
+  
+  bsr_metrics metrics{
+      metrics_type::BSR_IND,
+      bsr.ue_index,
+      bsr.rnti,
+      total_bytes
+  };
+  scheduler_metrics_sender::instance().send_bsr_metrics(metrics);
 
   // Send UL BSR indication to Scheduler.
   sched_impl->handle_ul_bsr_indication(ul_bsr_ind);

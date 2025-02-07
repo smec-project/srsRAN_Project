@@ -184,7 +184,7 @@ class TuttiController:
                         if rnti in self.request_start_times and seq_num in self.request_start_times[rnti]:
                             start_time = self.request_start_times[rnti][seq_num]
                             elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
-                            self.log_file.write(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms\n")
+                            self.log_file.write(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n")
                             self.log_file.flush()
                             del self.request_start_times[rnti][seq_num]
                         
@@ -224,6 +224,8 @@ class TuttiController:
                         self._handle_prb_metrics(values)
                     elif msg_type == 'SR':
                         self._handle_sr_metrics(values)
+                    elif msg_type == 'BSR':
+                        self._handle_bsr_metrics(values)
                 
             except Exception as e:
                 self.log_file.write(f"Error receiving RAN metrics: {e}\n")
@@ -494,7 +496,7 @@ class TuttiController:
         
         # Update latest PRB allocation and slot
         self.ue_prb_status[rnti] = (slot, prbs)
-        self.log_file.write(f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs}\n")
+        self.log_file.write(f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at {time.time()}\n")
         self.log_file.flush()
         
         # Update PRB history
@@ -504,7 +506,15 @@ class TuttiController:
         """Handle SR indication metrics"""
         rnti = values['RNTI'][-4:]  # Just take last 4 chars
         slot = int(values['SLOT'])
-        self.log_file.write(f"SR received from RNTI=0x{rnti}, slot={slot}\n")
+        self.log_file.write(f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}\n")
+        self.log_file.flush()
+
+    def _handle_bsr_metrics(self, values):
+        """Handle BSR metrics"""
+        rnti = values['RNTI'][-4:]  # Just take last 4 chars
+        ue_idx = values['UE_IDX']
+        bytes = int(values['BYTES'])
+        self.log_file.write(f"BSR received from RNTI=0x{rnti}, bytes={bytes} at {time.time()}\n")
         self.log_file.flush()
 
     def __del__(self):

@@ -172,4 +172,18 @@ bool scheduler_metrics_sender::send_sr_metrics(const sr_metrics& metrics)
 {
     std::string msg = format_sr_metrics(metrics);
     return send_message(msg);
+}
+
+std::string scheduler_metrics_sender::format_bsr_metrics(const bsr_metrics& metrics)
+{
+    return fmt::format("TYPE=BSR,UE_IDX={},RNTI={:#6x},BYTES={}\n",
+                      metrics.ue_index,
+                      (unsigned)metrics.crnti,
+                      metrics.nof_bytes);
+}
+
+bool scheduler_metrics_sender::send_bsr_metrics(const bsr_metrics& metrics)
+{
+    std::string msg = format_bsr_metrics(metrics);
+    return send_message(msg);
 } 
