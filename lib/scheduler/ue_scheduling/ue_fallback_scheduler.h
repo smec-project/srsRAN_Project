@@ -27,6 +27,7 @@
 #include "ue_repository.h"
 #include "srsran/scheduler/scheduler_configurator.h"
 #include <queue>
+#include <iostream>
 
 namespace srsran {
 

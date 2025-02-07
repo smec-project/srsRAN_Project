@@ -724,8 +724,8 @@ void scheduler_time_pf::handle_priority_messages()
                     // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
                 } else {
                     scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
-                    std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val 
-                             << std::dec << " to " << msg.priority << std::endl;
+                    // std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val 
+                    //          << std::dec << " to " << msg.priority << std::endl;
                 }
             }
         }

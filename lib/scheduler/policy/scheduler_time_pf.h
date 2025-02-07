@@ -64,7 +64,6 @@ private:
   /// Coefficient used to compute exponential moving average.
   const double exp_avg_alpha = 0.01;
 
-  // 改成静态成员
   static std::mutex priorities_mutex;
   static std::map<unsigned, double> ul_priorities;
 
