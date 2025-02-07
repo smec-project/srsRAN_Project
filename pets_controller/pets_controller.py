@@ -72,6 +72,10 @@ class TuttiController:
         self.priority_thread = threading.Thread(target=self._update_priorities)
         self.priority_thread.start()
 
+        # Add mapping between UE_IDX and RNTI
+        self.ue_idx_to_rnti = {}  # UE_IDX -> RNTI
+        self.rnti_to_ue_idx = {}  # RNTI -> UE_IDX
+
     def start(self):
         """Start the controller and all its connections"""
         self.running = True
@@ -218,12 +222,17 @@ class TuttiController:
                     values = dict(item.split('=') for item in line.split(','))
                     # Keep RNTI as string
                     rnti = values['RNTI'][-4:]  # Just take last 4 chars
+                    ue_idx = values['UE_IDX']
                     slot = int(values['SLOT'])
                     prbs = int(values['PRBs'])
                     
+                    # Update UE_IDX <-> RNTI mapping
+                    self.ue_idx_to_rnti[ue_idx] = rnti
+                    self.rnti_to_ue_idx[rnti] = ue_idx
+                    
                     # Store basic metrics
                     metrics[rnti] = {
-                        'UE_IDX': values['UE_IDX'],
+                        'UE_IDX': ue_idx,
                         'PRBs': prbs,
                         'SLOT': slot
                     }
