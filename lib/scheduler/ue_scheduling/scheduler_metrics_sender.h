@@ -51,39 +51,41 @@ struct ue_scheduling_metrics {
 class scheduler_metrics_sender
 {
 public:
-  scheduler_metrics_sender();
-  ~scheduler_metrics_sender() { stop(); }
+    static constexpr int DEFAULT_METRICS_PORT = 5556;
+    
+    scheduler_metrics_sender();
+    ~scheduler_metrics_sender() { stop(); }
 
-  /// \brief Initialize the TCP server.
-  /// \param[in] port TCP port to listen on.
-  /// \return True on success, false otherwise.
-  bool init(int port = 5556);
+    /// \brief Initialize the TCP server.
+    /// \param[in] port TCP port to listen on.
+    /// \return True on success, false otherwise.
+    bool init(int port = DEFAULT_METRICS_PORT);
 
-  /// \brief Stop the TCP server and cleanup resources.
-  void stop();
+    /// \brief Stop the TCP server and cleanup resources.
+    void stop();
 
-  /// \brief Send UE scheduling metrics to connected client.
-  /// \param[in] metrics UE scheduling metrics to send.
-  /// \return True if message was sent successfully, false otherwise.
-  bool send_metrics(const ue_scheduling_metrics& metrics);
+    /// \brief Send UE scheduling metrics to connected client.
+    /// \param[in] metrics UE scheduling metrics to send.
+    /// \return True if message was sent successfully, false otherwise.
+    bool send_metrics(const ue_scheduling_metrics& metrics);
 
-  bool send_message(const std::string& msg);
+    bool send_message(const std::string& msg);
 
 private:
-  /// \brief Format metrics into JSON string.
-  /// \param[in] metrics UE scheduling metrics to format.
-  /// \return Formatted JSON string.
-  std::string format_metrics(const ue_scheduling_metrics& metrics);
+    /// \brief Format metrics into JSON string.
+    /// \param[in] metrics UE scheduling metrics to format.
+    /// \return Formatted JSON string.
+    std::string format_metrics(const ue_scheduling_metrics& metrics);
 
-  /// \brief Thread function to handle incoming connections.
-  void accept_connections();
+    /// \brief Thread function to handle incoming connections.
+    void accept_connections();
 
-  std::mutex mutex;
-  int                    server_fd;
-  int                    client_fd;
-  std::atomic<bool>      running;
-  std::thread           accept_thread;
-  srslog::basic_logger& logger;
+    std::mutex mutex;
+    int                    server_fd;
+    int                    client_fd;
+    std::atomic<bool>      running;
+    std::thread           accept_thread;
+    srslog::basic_logger& logger;
 };
 
 } // namespace srsran

@@ -16,17 +16,24 @@ class TuttiController:
     ):
         # Application server setup
         self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Enable address/port reuse
+        self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.app_socket.bind(("0.0.0.0", app_port))
         self.app_socket.listen(5)
         self.app_connections: Dict[str, socket.socket] = {}
         
         # RAN metrics connection setup
         self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.ran_metrics_ip = ran_metrics_ip
         self.ran_metrics_port = ran_metrics_port
         
         # RAN control connection setup
         self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.ran_control_ip = ran_control_ip
         self.ran_control_port = ran_control_port
         
@@ -272,12 +279,30 @@ class TuttiController:
         
         # Close all application connections
         for conn in self.app_connections.values():
-            conn.close()
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+                conn.close()
+            except:
+                pass
         
         # Close server sockets
-        self.app_socket.close()
-        self.ran_metrics_socket.close()
-        self.ran_control_socket.close()
+        try:
+            self.app_socket.shutdown(socket.SHUT_RDWR)
+            self.app_socket.close()
+        except:
+            pass
+        
+        try:
+            self.ran_metrics_socket.shutdown(socket.SHUT_RDWR)
+            self.ran_metrics_socket.close()
+        except:
+            pass
+        
+        try:
+            self.ran_control_socket.shutdown(socket.SHUT_RDWR)
+            self.ran_control_socket.close()
+        except:
+            pass
 
     def _initialize_ue_priority(self, rnti: str):
         """Initialize priority for a new UE"""
@@ -462,9 +487,8 @@ class TuttiController:
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
 
     def __del__(self):
-        # Ensure file is properly closed
-        if hasattr(self, 'log_file'):
-            self.log_file.close()
+        """Ensure sockets are closed when object is destroyed"""
+        self.stop()
 
 def main():
     controller = TuttiController()

@@ -43,8 +43,7 @@ bool scheduler_metrics_sender::init(int port)
     
     // Check if already running
     if (running) {
-        logger.error("Metrics server already running");
-        return false;
+        return true;
     }
 
     int opt = 1;
@@ -54,9 +53,9 @@ bool scheduler_metrics_sender::init(int port)
         return false;
     }
 
-    // Set both SO_REUSEADDR and SO_REUSEPORT
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        logger.error("Failed to set SO_REUSEADDR: {}", strerror(errno));
+    // Set both SO_REUSEADDR and SO_REUSEPORT to allow socket reuse
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+        logger.error("Failed to set socket options: {}", strerror(errno));
         close(server_fd);
         return false;
     }
@@ -93,10 +92,13 @@ void scheduler_metrics_sender::stop()
     std::lock_guard<std::mutex> lock(mutex);
     running = false;
     
+    // Close client socket if open
     if (client_fd >= 0) {
         close(client_fd);
         client_fd = -1;
     }
+    
+    // Close server socket if open
     if (server_fd >= 0) {
         close(server_fd);
         server_fd = -1;
@@ -108,35 +110,40 @@ bool scheduler_metrics_sender::send_message(const std::string& msg)
     std::lock_guard<std::mutex> lock(mutex);
     
     if (!running) {
-        return false;
-    }
-
-        // Non-blocking check for new connections
-        if (client_fd < 0) {
-            struct sockaddr_in client_addr;
-            socklen_t client_len = sizeof(client_addr);
-            int new_client = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
-            
-            if (new_client >= 0) {
-                // Set non-blocking for client socket
-                int flags = fcntl(new_client, F_GETFL, 0);
-                fcntl(new_client, F_SETFL, flags | O_NONBLOCK);
-                client_fd = new_client;
-            }
-            return false;  // Skip sending if no client
-        }
-
-        // Non-blocking send
-        ssize_t sent = send(client_fd, msg.c_str(), msg.length(), MSG_DONTWAIT | MSG_NOSIGNAL);
-        if (sent < 0) {
-            if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                close(client_fd);
-                client_fd = -1;
-            }
+        if (!init(DEFAULT_METRICS_PORT)) {
             return false;
         }
-        return true;
     }
+
+    // Non-blocking check for new connections
+    if (client_fd < 0) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int new_client = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+        
+        if (new_client >= 0) {
+            // Set non-blocking for client socket
+            int flags = fcntl(new_client, F_GETFL, 0);
+            fcntl(new_client, F_SETFL, flags | O_NONBLOCK);
+            client_fd = new_client;
+        }
+        return false;  // Skip sending if no client
+    }
+
+    // Non-blocking send
+    ssize_t sent = send(client_fd, msg.c_str(), msg.length(), MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (sent < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            // Just close client socket and wait for new connection
+            close(client_fd);
+            client_fd = -1;
+            // Don't reinit server socket, just wait for new client
+            return false;
+        }
+        return false;
+    }
+    return true;
+}
 
 std::string scheduler_metrics_sender::format_metrics(const ue_scheduling_metrics& metrics)
 {
