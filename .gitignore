@@ -1,2 +1,3 @@
 build/*
 pets_controller/*.txt
+pets_controller/labeled_data/*
