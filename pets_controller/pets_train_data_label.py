@@ -3,6 +3,9 @@ import argparse
 import numpy as np
 from datetime import datetime
 import os
+import multiprocessing
+from functools import partial
+import time
 
 class TrainDataLabeler:
     # Define event type mapping
@@ -90,13 +93,17 @@ class TrainDataLabeler:
         Returns: [type, bytes, prbs, rel_time, time_diff, is_new_request]
         """
         event_type = event['type']
-        quantized = np.zeros(6, dtype=np.float32)  # Added time_diff dimension
+        quantized = np.zeros(6, dtype=np.float32)
+        
+        # Convert absolute timestamp to relative timestamp (milliseconds)
+        base_time = event.get('base_time', event['timestamp'])
+        rel_time = (event['timestamp'] - base_time) * 1000  # Convert to milliseconds
         
         quantized[0] = self.EVENT_TYPES[event_type]
         quantized[1] = event['value']['bytes'] if event_type == 'BSR' else -1
         quantized[2] = event['value']['prbs'] if event_type == 'PRB' else -1
-        quantized[3] = event['timestamp']
-        quantized[4] = event.get('time_diff', 0)  # time difference in ms
+        quantized[3] = rel_time  # Store relative time in milliseconds
+        quantized[4] = event.get('time_diff', 0)  # Already in milliseconds
         quantized[5] = is_new_request
         
         return quantized
@@ -112,14 +119,33 @@ class TrainDataLabeler:
         # Sort events by timestamp
         events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
         
-        # Convert timestamps to relative time (ms since first event)
+        # Set base time for all events
         base_time = events[0]['timestamp']
+        for event in events:
+            event['base_time'] = base_time
+        
+        # Convert timestamps to relative time (ms since first event)
         for event in events:
             event['rel_time'] = (event['timestamp'] - base_time) * 1000  # convert to ms
             
-        # Alternatively, calculate time differences between consecutive events
-        for i in range(1, len(events)):
-            events[i]['time_diff'] = (events[i]['timestamp'] - events[i-1]['timestamp']) * 1000
+        # Calculate time differences between consecutive SR/BSR/PRB events
+        valid_event_types = {'SR', 'BSR', 'PRB'}
+        valid_events = [e for e in events if e['type'] in valid_event_types]
+        
+        # Set time_diff for first valid event
+        if valid_events:
+            valid_events[0]['time_diff'] = 0
+            # Calculate time_diff for subsequent valid events
+            for i in range(1, len(valid_events)):
+                time_diff = (valid_events[i]['timestamp'] - valid_events[i-1]['timestamp']) * 1000
+                valid_events[i]['time_diff'] = time_diff
+        
+        # Create a mapping of timestamps to time_diffs for valid events
+        time_diff_map = {e['timestamp']: e['time_diff'] for e in valid_events}
+        
+        # Apply time_diffs to original events list
+        for event in events:
+            event['time_diff'] = time_diff_map.get(event['timestamp'], 0)
 
         # Count event types
         sr_count = sum(1 for e in events if e['type'] == 'SR')
@@ -220,14 +246,42 @@ class TrainDataLabeler:
         # Sort events by timestamp
         events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
         
-        # Convert timestamps to relative time
+        # Set base time for all events
         base_time = events[0]['timestamp']
         for event in events:
-            event['rel_time'] = (event['timestamp'] - base_time) * 1000
+            event['base_time'] = base_time
+        
+        # Convert timestamps to relative time (ms since first event)
+        for event in events:
+            event['rel_time'] = (event['timestamp'] - base_time) * 1000  # convert to ms
             
-        # Calculate time differences between consecutive events
-        for i in range(1, len(events)):
-            events[i]['time_diff'] = (events[i]['timestamp'] - events[i-1]['timestamp']) * 1000
+        # Calculate time differences between consecutive SR/BSR/PRB events
+        valid_event_types = {'SR', 'BSR', 'PRB'}
+        valid_events = [e for e in events if e['type'] in valid_event_types]
+        
+        # Set time_diff for first valid event
+        if valid_events:
+            valid_events[0]['time_diff'] = 0
+            # Calculate time_diff for subsequent valid events
+            for i in range(1, len(valid_events)):
+                time_diff = (valid_events[i]['timestamp'] - valid_events[i-1]['timestamp']) * 1000
+                valid_events[i]['time_diff'] = time_diff
+        
+        # Create a mapping of timestamps to time_diffs for valid events
+        time_diff_map = {e['timestamp']: e['time_diff'] for e in valid_events}
+        
+        # Apply time_diffs to original events list
+        for event in events:
+            event['time_diff'] = time_diff_map.get(event['timestamp'], 0)
+
+        # Count event types
+        sr_count = sum(1 for e in events if e['type'] == 'SR')
+        bsr_count = sum(1 for e in events if e['type'] == 'BSR')
+        prb_count = sum(1 for e in events if e['type'] == 'PRB')
+        req_count = sum(1 for e in events if e['type'] == 'REQUEST_START')
+        
+        print(f"Total events: {len(events)}")
+        print(f"SR: {sr_count}, BSR: {bsr_count}, PRB: {prb_count}, Requests: {req_count}")
 
         # Find all request start-end pairs with their indices
         request_pairs = []  # [(start_idx, end_idx, seq_num), ...]
@@ -363,14 +417,42 @@ class TrainDataLabeler:
         # Sort events by timestamp
         events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
         
-        # Convert timestamps to relative time
+        # Set base time for all events
         base_time = events[0]['timestamp']
         for event in events:
-            event['rel_time'] = (event['timestamp'] - base_time) * 1000
+            event['base_time'] = base_time
+        
+        # Convert timestamps to relative time (ms since first event)
+        for event in events:
+            event['rel_time'] = (event['timestamp'] - base_time) * 1000  # convert to ms
             
-        # Calculate time differences between consecutive events
-        for i in range(1, len(events)):
-            events[i]['time_diff'] = (events[i]['timestamp'] - events[i-1]['timestamp']) * 1000
+        # Calculate time differences between consecutive SR/BSR/PRB events
+        valid_event_types = {'SR', 'BSR', 'PRB'}
+        valid_events = [e for e in events if e['type'] in valid_event_types]
+        
+        # Set time_diff for first valid event
+        if valid_events:
+            valid_events[0]['time_diff'] = 0
+            # Calculate time_diff for subsequent valid events
+            for i in range(1, len(valid_events)):
+                time_diff = (valid_events[i]['timestamp'] - valid_events[i-1]['timestamp']) * 1000
+                valid_events[i]['time_diff'] = time_diff
+        
+        # Create a mapping of timestamps to time_diffs for valid events
+        time_diff_map = {e['timestamp']: e['time_diff'] for e in valid_events}
+        
+        # Apply time_diffs to original events list
+        for event in events:
+            event['time_diff'] = time_diff_map.get(event['timestamp'], 0)
+
+        # Count event types
+        sr_count = sum(1 for e in events if e['type'] == 'SR')
+        bsr_count = sum(1 for e in events if e['type'] == 'BSR')
+        prb_count = sum(1 for e in events if e['type'] == 'PRB')
+        req_count = sum(1 for e in events if e['type'] == 'REQUEST_START')
+        
+        print(f"Total events: {len(events)}")
+        print(f"SR: {sr_count}, BSR: {bsr_count}, PRB: {prb_count}, Requests: {req_count}")
 
         # Find all request start-end pairs with their indices
         request_pairs = []  # [(start_idx, end_idx, seq_num), ...]
@@ -447,14 +529,42 @@ class TrainDataLabeler:
         # Sort events by timestamp
         events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
         
-        # Convert timestamps to relative time
+        # Set base time for all events
         base_time = events[0]['timestamp']
         for event in events:
-            event['rel_time'] = (event['timestamp'] - base_time) * 1000
+            event['base_time'] = base_time
+        
+        # Convert timestamps to relative time (ms since first event)
+        for event in events:
+            event['rel_time'] = (event['timestamp'] - base_time) * 1000  # convert to ms
             
-        # Calculate time differences between consecutive events
-        for i in range(1, len(events)):
-            events[i]['time_diff'] = (events[i]['timestamp'] - events[i-1]['timestamp']) * 1000
+        # Calculate time differences between consecutive SR/BSR/PRB events
+        valid_event_types = {'SR', 'BSR', 'PRB'}
+        valid_events = [e for e in events if e['type'] in valid_event_types]
+        
+        # Set time_diff for first valid event
+        if valid_events:
+            valid_events[0]['time_diff'] = 0
+            # Calculate time_diff for subsequent valid events
+            for i in range(1, len(valid_events)):
+                time_diff = (valid_events[i]['timestamp'] - valid_events[i-1]['timestamp']) * 1000
+                valid_events[i]['time_diff'] = time_diff
+        
+        # Create a mapping of timestamps to time_diffs for valid events
+        time_diff_map = {e['timestamp']: e['time_diff'] for e in valid_events}
+        
+        # Apply time_diffs to original events list
+        for event in events:
+            event['time_diff'] = time_diff_map.get(event['timestamp'], 0)
+
+        # Count event types
+        sr_count = sum(1 for e in events if e['type'] == 'SR')
+        bsr_count = sum(1 for e in events if e['type'] == 'BSR')
+        prb_count = sum(1 for e in events if e['type'] == 'PRB')
+        req_count = sum(1 for e in events if e['type'] == 'REQUEST_START')
+        
+        print(f"Total events: {len(events)}")
+        print(f"SR: {sr_count}, BSR: {bsr_count}, PRB: {prb_count}, Requests: {req_count}")
 
         # Find all request start-end pairs with their indices
         request_pairs = []  # [(start_idx, end_idx, seq_num), ...]
@@ -521,67 +631,133 @@ class TrainDataLabeler:
 
     def analyze_all_ues(self):
         """
-        Analyze events for all UEs that have requests
+        Analyze events for all UEs that have requests using multiple processes
         """
         print(f"\nFound {len(self.active_rntis)} RNTIs with requests: {sorted(self.active_rntis)}")
         
+        # Create process pool
+        num_cores = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool(processes=num_cores)
+        
+        # Prepare arguments for parallel processing
+        process_func = partial(process_single_rnti, events_dict=self.events)
+        
+        # Process RNTIs in parallel
+        results = pool.map(process_func, sorted(self.active_rntis))
+        
+        # Close the pool
+        pool.close()
+        pool.join()
+        
+        # Organize results
         all_ue_data = {}
         all_ue_data_with_sr = {}
         all_ue_data_first_event = {}
         all_ue_data_first_bsr = {}
         
-        for rnti in sorted(self.active_rntis):
-            print(f"\nAnalyzing RNTI {rnti}:")
-            print("\nBSR-only analysis:")
-            ue_data = self.analyze_ue_events(rnti)
+        for rnti, (ue_data, ue_data_with_sr, ue_data_first_event, ue_data_first_bsr) in results:
             if ue_data is not None:
                 all_ue_data[rnti] = ue_data
-                # self.print_request_timing(rnti)
-
-            print("\nSR+BSR analysis:")
-            ue_data_with_sr, requests_info = self.analyze_ue_events_with_sr(rnti)
             if ue_data_with_sr is not None:
                 all_ue_data_with_sr[rnti] = ue_data_with_sr
-                # self.print_request_timing_with_sr(rnti, requests_info)
-
-            print("\nFirst Event analysis:")
-            ue_data_first_event, requests_info = self.analyze_ue_events_first_event(rnti)
             if ue_data_first_event is not None:
                 all_ue_data_first_event[rnti] = ue_data_first_event
-                # self.print_request_timing_first_event(rnti, requests_info)
-
-            print("\nFirst BSR analysis:")
-            ue_data_first_bsr, requests_info = self.analyze_ue_events_first_bsr(rnti)
             if ue_data_first_bsr is not None:
                 all_ue_data_first_bsr[rnti] = ue_data_first_bsr
-                # self.print_request_timing_first_bsr(rnti, requests_info)
                 
         return all_ue_data, all_ue_data_with_sr, all_ue_data_first_event, all_ue_data_first_bsr
+
+def print_numpy_data_info(label_type, data):
+    """
+    Print information about the labeled numpy data
+    """
+    print(f"\n{label_type} Data Analysis:")
+    print(f"Number of RNTIs: {len(data)}")
+    
+    for rnti, ue_data in data.items():
+        print(f"\nRNTI {rnti}:")
+        # Count total events
+        total_events = len(ue_data)
+        # Count event types
+        sr_count = np.sum(ue_data[:, 0] == 0)  # SR type is 0
+        bsr_count = np.sum(ue_data[:, 0] == 1)  # BSR type is 1
+        prb_count = np.sum(ue_data[:, 0] == 2)  # PRB type is 2
+        # Count labeled events
+        labeled_count = np.sum(ue_data[:, 5] == 1)
+        
+        print(f"Total events: {total_events}")
+        print(f"Event distribution: SR={sr_count}, BSR={bsr_count}, PRB={prb_count}")
+        print(f"Labeled events: {labeled_count}")
+        
+        print("\nAll events details:")
+        print("Type | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) | Label")
+        for event in ue_data:
+            event_type = "SR" if event[0] == 0 else "BSR" if event[0] == 1 else "PRB"
+            label = "1" if event[5] == 1 else "0"
+            print(f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:11.2f} | {label:5}")
+        print("-" * 70)
+
+def process_single_rnti(rnti, events_dict, print_info=True):
+    """
+    Process a single RNTI's data
+    """
+    labeler = TrainDataLabeler()
+    labeler.events = {rnti: events_dict[rnti]}
+    labeler.active_rntis = {rnti}
+    
+    if print_info:
+        print(f"\nAnalyzing RNTI {rnti}:")
+    
+    # Run all analyses
+    ue_data = labeler.analyze_ue_events(rnti)
+    ue_data_with_sr, _ = labeler.analyze_ue_events_with_sr(rnti)
+    ue_data_first_event, _ = labeler.analyze_ue_events_first_event(rnti)
+    ue_data_first_bsr, _ = labeler.analyze_ue_events_first_bsr(rnti)
+    
+    return rnti, (ue_data, ue_data_with_sr, ue_data_first_event, ue_data_first_bsr)
 
 def main():
     parser = argparse.ArgumentParser(description='Process log file and generate training data labels')
     parser.add_argument('log_file', help='Path to the log file to process')
     parser.add_argument('--output', help='Output file path for labeled data (.npy)')
+    parser.add_argument('--threads', type=int, help='Number of threads to use', default=16)
     
     args = parser.parse_args()
     
     if args.output is None:
         input_filename = args.log_file.split('/')[-1]
         base_name = input_filename.rsplit('.', 1)[0]
-        # Create a subdirectory with the input file name
         output_dir = f"labeled_data/{base_name}"
         os.makedirs(output_dir, exist_ok=True)
         args.output = f"{output_dir}/{base_name}"
     
+    # Set number of processes
+    if args.threads:
+        multiprocessing.set_start_method('spawn')
+        pool = multiprocessing.Pool(processes=args.threads)
+    
+    start_time = time.time()
+    
     labeler = TrainDataLabeler()
     labeler.parse_log_file(args.log_file)
     labeled_data, labeled_data_with_sr, labeled_data_first_event, labeled_data_first_bsr = labeler.analyze_all_ues()
+    
+    end_time = time.time()
+    print(f"\nProcessing time: {end_time - start_time:.2f} seconds")
     
     # Save all versions of labeled data
     np.save(f"{args.output}_bsr_only.npy", labeled_data)
     np.save(f"{args.output}_sr_bsr.npy", labeled_data_with_sr)
     np.save(f"{args.output}_first_event.npy", labeled_data_first_event)
     np.save(f"{args.output}_first_bsr.npy", labeled_data_first_bsr)
+    
+    # Print information about saved data
+    # print("\nAnalyzing saved labeled data:")
+    # print_numpy_data_info("BSR-only", labeled_data)
+    # print_numpy_data_info("SR+BSR", labeled_data_with_sr)
+    # print_numpy_data_info("First Event", labeled_data_first_event)
+    # print_numpy_data_info("First BSR", labeled_data_first_bsr)
+    
     print(f"\nLabeled data saved to directory: labeled_data/{base_name}/")
     print(f"Files:")
     print(f"BSR-only: {base_name}_bsr_only.npy")
