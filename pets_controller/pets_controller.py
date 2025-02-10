@@ -153,6 +153,13 @@ class TuttiController:
                         self.ue_resource_needs[rnti] = 0
                         self.ue_pending_requests[rnti] = {}
                         self.request_start_times[rnti] = {}
+                        
+                    elif msg_type == "Start":
+                        # Format: "Start|rnti|seq_number"
+                        _, rnti, seq_num = msg_parts
+                        current_time = time.time()
+                        self.log_file.write(f"Request {seq_num} from RNTI {rnti} start at {current_time}\n")
+                        self.log_file.flush()
 
                     elif msg_type == "REQUEST":
                         # Format: "REQUEST|RNTI|SEQ_NUM"
@@ -347,8 +354,8 @@ class TuttiController:
                 current_offset = self.ue_priorities[ue_rnti] + max(DEFAULT_PRIORITY_OFFSET, abs(actual_prbs - ue_prb_requirements[ue_rnti][1])/actual_prbs)
             else:
                 current_offset = self.ue_priorities[ue_rnti] + abs(actual_prbs - ue_prb_requirements[ue_rnti][1])
-        self.log_file.write(f"incentive {ue_rnti} {actual_prbs} {ue_prb_requirements[ue_rnti][1]} {current_offset}\n")
-        self.log_file.flush()  # Ensure immediate write
+        # self.log_file.write(f"incentive {ue_rnti} {actual_prbs} {ue_prb_requirements[ue_rnti][1]} {current_offset}\n")
+        # self.log_file.flush()  # Ensure immediate write
         return current_offset
 
     def _calculate_accelerate_priority(self, ue_rnti: str) -> float:
@@ -382,8 +389,8 @@ class TuttiController:
         
         # Calculate priority using exponential decay and remaining PRBs
         priority = self.ue_priorities[ue_rnti] + remaining_prbs * math.exp(-1 * time_to_deadline_s)
-        self.log_file.write(f"accelerate {ue_rnti} {prbs_allocated} {total_prbs_needed} {time_to_deadline_s} {priority}\n")
-        self.log_file.flush()
+        # self.log_file.write(f"accelerate {ue_rnti} {prbs_allocated} {total_prbs_needed} {time_to_deadline_s} {priority}\n")
+        # self.log_file.flush()
         return priority
 
     def _update_priorities(self):
@@ -514,7 +521,7 @@ class TuttiController:
         rnti = values['RNTI'][-4:]  # Just take last 4 chars
         ue_idx = values['UE_IDX']
         bytes = int(values['BYTES'])
-        self.log_file.write(f"BSR received from RNTI=0x{rnti}, bytes={bytes} at {time.time()}\n")
+        self.log_file.write(f"bsr received from RNTI=0x{rnti}, bytes={bytes} at {time.time()}\n")
         self.log_file.flush()
 
     def __del__(self):
