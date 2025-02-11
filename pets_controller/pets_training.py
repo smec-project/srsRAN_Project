@@ -78,7 +78,7 @@ def prepare_training_data(labeled_data):
     
     return features, labels
 
-def evaluate_per_rnti(model, scaler, val_data, model_name):
+def evaluate_per_rnti(model, scaler, val_data, model_name, feature_indices):
     """
     Evaluate model performance for each RNTI separately
     """
@@ -89,6 +89,9 @@ def evaluate_per_rnti(model, scaler, val_data, model_name):
         X_val_rnti, y_val_rnti = prepare_training_data({rnti: events})
         if len(X_val_rnti) == 0:
             continue
+            
+        # Select features
+        X_val_rnti = X_val_rnti[:, feature_indices]
             
         # Scale features
         X_val_scaled = scaler.transform(X_val_rnti)
@@ -113,9 +116,9 @@ def evaluate_per_rnti(model, scaler, val_data, model_name):
         print(f"    TN: {tn}, FP: {fp}")
         print(f"    FN: {fn}, TP: {tp}")
 
-def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
+def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type, feature_indices):
     """
-    Train and evaluate the model using normalized window-based features
+    Train and evaluate the model using selected features
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -128,13 +131,31 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     X_train, y_train = prepare_training_data(train_data)
     X_val, y_val = prepare_training_data(val_data)
     
+    # Select features
+    X_train = X_train[:, feature_indices]
+    X_val = X_val[:, feature_indices]
+    
+    # All feature names
+    all_feature_names = [
+        'BSR Difference',    # Change in BSR between two consecutive BSR events
+        'Total PRBs',        # Sum of PRBs allocated in the window
+        'SR Count',          # Number of SRs in the window
+        'End BSR',           # Value of the second BSR
+        'BSR per PRB',       # BSR difference normalized by total PRBs
+        'Window Duration'    # Time duration between two BSR events
+    ]
+    
+    # Selected feature names
+    feature_names = [all_feature_names[i] for i in feature_indices]
+    
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_val_scaled = scaler.transform(X_val)
     
+    print("\nUsing features:", ", ".join(feature_names))
+    
     print("\nFeature statistics before normalization:")
-    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR', 
-                            'BSR per PRB', 'Window Duration']):
+    for i, name in enumerate(feature_names):
         print(f"{name}:")
         print(f"  Mean: {X_train[:, i].mean():.2f}")
         print(f"  Std: {X_train[:, i].std():.2f}")
@@ -142,8 +163,7 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
         print(f"  Max: {X_train[:, i].max():.2f}")
     
     print("\nFeature statistics after normalization:")
-    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR',
-                            'BSR per PRB', 'Window Duration']):
+    for i, name in enumerate(feature_names):
         print(f"{name}:")
         print(f"  Mean: {X_train_scaled[:, i].mean():.2f}")
         print(f"  Std: {X_train_scaled[:, i].std():.2f}")
@@ -154,16 +174,6 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     print(f"Number of windows: {len(X_train)}")
     print(f"Positive labels: {np.sum(y_train == 1)}")
     print(f"Negative labels: {np.sum(y_train == 0)}")
-    
-    # Feature names for interpretation
-    feature_names = [
-        'BSR Difference',    # Change in BSR between two consecutive BSR events
-        'Total PRBs',        # Sum of PRBs allocated in the window
-        'SR Count',          # Number of SRs in the window
-        'End BSR',           # Value of the second BSR
-        'BSR per PRB',       # BSR difference normalized by total PRBs
-        'Window Duration'    # Time duration between two BSR events
-    ]
     
     # Train models
     models = {
@@ -215,7 +225,7 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
         print(confusion_matrix(y_val, y_pred))
         
         # Per-RNTI evaluation
-        evaluate_per_rnti(model, scaler, val_data, model_name)
+        evaluate_per_rnti(model, scaler, val_data, model_name, feature_indices)
         
         # Save model and scaler
         model_path = os.path.join(output_dir, f"{label_type}_{model_name}.joblib")
@@ -247,8 +257,22 @@ def main():
     parser.add_argument('train_file', help='Path to training data file (.npy)')
     parser.add_argument('val_file', help='Path to validation data file (.npy)')
     parser.add_argument('--output', default='models', help='Output directory for trained models')
+    parser.add_argument('--features', type=str, default='0,1,2,3,4,5',
+                       help='Comma-separated list of feature indices to use (0-5). Features are: '
+                            '0:BSR Difference, 1:Total PRBs, 2:SR Count, 3:End BSR, '
+                            '4:BSR per PRB, 5:Window Duration')
     
     args = parser.parse_args()
+    
+    # Parse feature indices
+    try:
+        feature_indices = [int(i) for i in args.features.split(',')]
+        # Validate indices
+        if not all(0 <= i <= 5 for i in feature_indices):
+            raise ValueError("Feature indices must be between 0 and 5")
+    except ValueError as e:
+        print(f"Error parsing feature indices: {e}")
+        return
     
     # Check if files exist
     if not os.path.exists(args.train_file):
@@ -265,8 +289,9 @@ def main():
     print(f"\nProcessing {label_type} labels...")
     print(f"Training file: {args.train_file}")
     print(f"Validation file: {args.val_file}")
+    print(f"Using features: {args.features}")
     
-    results = train_and_evaluate(args.train_file, args.val_file, args.output, label_type)
+    results = train_and_evaluate(args.train_file, args.val_file, args.output, label_type, feature_indices)
 
 if __name__ == "__main__":
     main()
