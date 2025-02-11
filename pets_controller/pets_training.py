@@ -2,6 +2,8 @@ import numpy as np
 import argparse
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
+import lightgbm as lgb
 from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 import os
@@ -15,7 +17,7 @@ def extract_window_features(events, start_idx, end_idx):
         start_idx: index of first BSR
         end_idx: index of second BSR
     Returns:
-        features: [bsr_diff, total_prbs, sr_count, end_bsr_value]
+        features: [bsr_diff, total_prbs, sr_count, end_bsr_value, bsr_per_prb, window_duration]
     """
     start_bsr = events[start_idx]
     end_bsr = events[end_idx]
@@ -36,8 +38,15 @@ def extract_window_features(events, start_idx, end_idx):
             total_prbs += event[2]  # index 2 is PRBs
         elif event[0] == 0:  # SR event
             sr_count += 1
+    
+    # Calculate combined features
+    # BSR difference per PRB: indicates how BSR changes with each PRB allocation
+    bsr_per_prb = bsr_diff / (total_prbs + 1e-6)  # Add small epsilon to avoid division by zero
+    
+    # Time duration between BSRs
+    window_duration = end_bsr[3] - start_bsr[3]  # index 3 is timestamp
             
-    return np.array([bsr_diff, total_prbs, sr_count, end_bsr_value])
+    return np.array([bsr_diff, total_prbs, sr_count, end_bsr_value, bsr_per_prb, window_duration])
 
 def prepare_training_data(labeled_data):
     """
@@ -124,7 +133,8 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     X_val_scaled = scaler.transform(X_val)
     
     print("\nFeature statistics before normalization:")
-    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR']):
+    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR', 
+                            'BSR per PRB', 'Window Duration']):
         print(f"{name}:")
         print(f"  Mean: {X_train[:, i].mean():.2f}")
         print(f"  Std: {X_train[:, i].std():.2f}")
@@ -132,7 +142,8 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
         print(f"  Max: {X_train[:, i].max():.2f}")
     
     print("\nFeature statistics after normalization:")
-    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR']):
+    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR',
+                            'BSR per PRB', 'Window Duration']):
         print(f"{name}:")
         print(f"  Mean: {X_train_scaled[:, i].mean():.2f}")
         print(f"  Std: {X_train_scaled[:, i].std():.2f}")
@@ -146,10 +157,12 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     
     # Feature names for interpretation
     feature_names = [
-        'BSR Difference',
-        'Total PRBs',
-        'SR Count',
-        'End BSR'  # The value of the second BSR
+        'BSR Difference',    # Change in BSR between two consecutive BSR events
+        'Total PRBs',        # Sum of PRBs allocated in the window
+        'SR Count',          # Number of SRs in the window
+        'End BSR',           # Value of the second BSR
+        'BSR per PRB',       # BSR difference normalized by total PRBs
+        'Window Duration'    # Time duration between two BSR events
     ]
     
     # Train models
@@ -165,6 +178,24 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
             min_samples_split=10,
             class_weight='balanced',
             n_jobs=-1
+        ),
+        'xgboost': xgb.XGBClassifier(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            scale_pos_weight=np.sum(y_train == 0) / np.sum(y_train == 1),  # Handle class imbalance
+            n_jobs=-1
+        ),
+        'lightgbm': lgb.LGBMClassifier(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            min_child_samples=20,
+            min_split_gain=1e-3,
+            num_leaves=31,
+            scale_pos_weight=np.sum(y_train == 0) / np.sum(y_train == 1),  # Handle class imbalance
+            n_jobs=-1,
+            verbose=-1
         )
     }
     
