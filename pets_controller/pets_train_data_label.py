@@ -100,8 +100,8 @@ class TrainDataLabeler:
         rel_time = (event['timestamp'] - base_time) * 1000  # Convert to milliseconds
         
         quantized[0] = self.EVENT_TYPES[event_type]
-        quantized[1] = event['value']['bytes'] if event_type == 'BSR' else -1
-        quantized[2] = event['value']['prbs'] if event_type == 'PRB' else -1
+        quantized[1] = event['value']['bytes'] if event_type == 'BSR' else 0
+        quantized[2] = event['value']['prbs'] if event_type == 'PRB' else 0
         quantized[3] = rel_time  # Store relative time in milliseconds
         quantized[4] = event.get('time_diff', 0)  # Already in milliseconds
         quantized[5] = is_new_request
