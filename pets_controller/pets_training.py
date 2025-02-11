@@ -15,13 +15,16 @@ def extract_window_features(events, start_idx, end_idx):
         start_idx: index of first BSR
         end_idx: index of second BSR
     Returns:
-        features: [bsr_diff, total_prbs, sr_count]
+        features: [bsr_diff, total_prbs, sr_count, end_bsr_value]
     """
     start_bsr = events[start_idx]
     end_bsr = events[end_idx]
     
     # Calculate BSR difference
     bsr_diff = end_bsr[1] - start_bsr[1]  # index 1 is BSR bytes
+    
+    # Get end BSR value
+    end_bsr_value = end_bsr[1]  # The second BSR's value
     
     # Calculate total PRBs in window
     total_prbs = 0
@@ -34,7 +37,7 @@ def extract_window_features(events, start_idx, end_idx):
         elif event[0] == 0:  # SR event
             sr_count += 1
             
-    return np.array([bsr_diff, total_prbs, sr_count])
+    return np.array([bsr_diff, total_prbs, sr_count, end_bsr_value])
 
 def prepare_training_data(labeled_data):
     """
@@ -66,6 +69,41 @@ def prepare_training_data(labeled_data):
     
     return features, labels
 
+def evaluate_per_rnti(model, scaler, val_data, model_name):
+    """
+    Evaluate model performance for each RNTI separately
+    """
+    print(f"\nPer-RNTI Evaluation for {model_name}:")
+    
+    for rnti, events in val_data.items():
+        # Prepare data for this RNTI
+        X_val_rnti, y_val_rnti = prepare_training_data({rnti: events})
+        if len(X_val_rnti) == 0:
+            continue
+            
+        # Scale features
+        X_val_scaled = scaler.transform(X_val_rnti)
+        
+        # Get predictions
+        y_pred = model.predict(X_val_scaled)
+        
+        # Calculate metrics
+        accuracy = np.mean(y_val_rnti == y_pred)
+        tn, fp, fn, tp = confusion_matrix(y_val_rnti, y_pred).ravel()
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        
+        print(f"\nRNTI {rnti}:")
+        print(f"  Windows: {len(y_val_rnti)}")
+        print(f"  Accuracy: {accuracy:.4f}")
+        print(f"  Precision: {precision:.4f}")
+        print(f"  Recall: {recall:.4f}")
+        print(f"  F1-score: {f1:.4f}")
+        print("  Confusion Matrix:")
+        print(f"    TN: {tn}, FP: {fp}")
+        print(f"    FN: {fn}, TP: {tp}")
+
 def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     """
     Train and evaluate the model using normalized window-based features
@@ -86,7 +124,7 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     X_val_scaled = scaler.transform(X_val)
     
     print("\nFeature statistics before normalization:")
-    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count']):
+    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR']):
         print(f"{name}:")
         print(f"  Mean: {X_train[:, i].mean():.2f}")
         print(f"  Std: {X_train[:, i].std():.2f}")
@@ -94,7 +132,7 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
         print(f"  Max: {X_train[:, i].max():.2f}")
     
     print("\nFeature statistics after normalization:")
-    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count']):
+    for i, name in enumerate(['BSR Difference', 'Total PRBs', 'SR Count', 'End BSR']):
         print(f"{name}:")
         print(f"  Mean: {X_train_scaled[:, i].mean():.2f}")
         print(f"  Std: {X_train_scaled[:, i].std():.2f}")
@@ -110,7 +148,8 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
     feature_names = [
         'BSR Difference',
         'Total PRBs',
-        'SR Count'
+        'SR Count',
+        'End BSR'  # The value of the second BSR
     ]
     
     # Train models
@@ -136,15 +175,16 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type):
         # Train with normalized features
         model.fit(X_train_scaled, y_train)
         
-        # Evaluate on normalized validation set
+        # Overall evaluation
         y_pred = model.predict(X_val_scaled)
-        
-        # Print results
-        print(f"\nValidation Results for {model_name}:")
+        print(f"\nOverall Validation Results for {model_name}:")
         print("\nClassification Report:")
         print(classification_report(y_val, y_pred))
         print("\nConfusion Matrix:")
         print(confusion_matrix(y_val, y_pred))
+        
+        # Per-RNTI evaluation
+        evaluate_per_rnti(model, scaler, val_data, model_name)
         
         # Save model and scaler
         model_path = os.path.join(output_dir, f"{label_type}_{model_name}.joblib")
