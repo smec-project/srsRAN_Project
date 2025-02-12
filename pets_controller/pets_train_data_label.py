@@ -27,8 +27,8 @@ class TrainDataLabeler:
         """
         Parse the log file and extract all events including request start/end
         """
-        request_start_seq = 1
-        request_end_seq = 1
+        request_start_seq = {}
+        request_end_seq = {}
         with open(filename, 'r') as f:
             for line in f:
                 try:
@@ -47,11 +47,15 @@ class TrainDataLabeler:
                         self.active_rntis.add(rnti)
                         
                         if 'start at' in line:
-                            self.add_event(rnti, timestamp, 'REQUEST_START', {'seq': request_start_seq})
-                            request_start_seq += 1
+                            if rnti not in request_start_seq:
+                                request_start_seq[rnti] = 1
+                            self.add_event(rnti, timestamp, 'REQUEST_START', {'seq': request_start_seq[rnti]})
+                            request_start_seq[rnti] += 1
                         elif 'completed in' in line:
-                            self.add_event(rnti, timestamp, 'REQUEST_END', {'seq': request_end_seq})
-                            request_end_seq += 1
+                            if rnti not in request_end_seq:
+                                request_end_seq[rnti] = 1
+                            self.add_event(rnti, timestamp, 'REQUEST_END', {'seq': request_end_seq[rnti]})
+                            request_end_seq[rnti] += 1
                         continue
 
                     if 'SR received' in line:
@@ -680,7 +684,7 @@ def print_numpy_data_info(label_type, data):
     print(f"Number of RNTIs: {len(data)}")
     
     for rnti, ue_data in data.items():
-        print(f"\nRNTI {rnti}:")
+        print(f"\nRNTI {rnti}, {label_type}:")
         # Count total events
         total_events = len(ue_data)
         # Count event types
@@ -760,10 +764,10 @@ def main():
     
     # Print information about saved data
     # print("\nAnalyzing saved labeled data:")
-    # print_numpy_data_info("BSR-only", labeled_data)
-    # print_numpy_data_info("SR+BSR", labeled_data_with_sr)
-    # print_numpy_data_info("First Event", labeled_data_first_event)
-    # print_numpy_data_info("First BSR", labeled_data_first_bsr)
+    print_numpy_data_info("BSR-only", labeled_data)
+    print_numpy_data_info("SR+BSR", labeled_data_with_sr)
+    print_numpy_data_info("First Event", labeled_data_first_event)
+    print_numpy_data_info("First BSR", labeled_data_first_bsr)
     
     print(f"\nLabeled data saved to directory: labeled_data/{base_name}/")
     print(f"Files:")
