@@ -13,16 +13,12 @@ import random
 
 def extract_window_features(events, window_bsr_indices, historical_bsr_avg, window_size=1):
     """
-    Extract features for a window between BSRs, with features for each BSR interval
-    Args:
-        events: list of events
-        window_bsr_indices: list of BSR indices for the window
-        historical_bsr_avg: average of up to 10 previous BSR values
-        window_size: number of BSR intervals to include
-    Returns:
-        features: concatenated features for each BSR interval in the window
+    Extract features for a window between BSRs
     """
     all_features = []
+    
+    # Get the last BSR's time as the search end time
+    final_bsr_time = events[window_bsr_indices[-1]][3]
     
     # Process each BSR interval in the window
     for i in range(window_size):
@@ -32,16 +28,28 @@ def extract_window_features(events, window_bsr_indices, historical_bsr_avg, wind
         start_bsr = events[current_start_idx]
         end_bsr = events[current_end_idx]
         
-        # Calculate BSR difference for this interval
+        # Find first PRB after start_bsr but before final_bsr
+        first_prb_time = final_bsr_time  # Default to final BSR time if no PRB found
+        search_idx = current_start_idx + 1
+        while search_idx < len(events):
+            if events[search_idx][0] == 2:  # PRB event
+                first_prb_time = events[search_idx][3]
+                break
+            if events[search_idx][3] > final_bsr_time:  # Stop if we reach final BSR time
+                break
+            search_idx += 1
+        
+        # Calculate time until first PRB
+        time_until_prb = first_prb_time - start_bsr[3]
+        
+        # Calculate other features as before
         bsr_diff = end_bsr[1] - start_bsr[1]
         end_bsr_value = end_bsr[1]
         
-        # Calculate metrics for this interval
         total_prbs = 0
         sr_count = 0
         prb_events = 0
         
-        # Process events in this interval
         for event in events[current_start_idx+1:current_end_idx]:
             if event[0] == 2:  # PRB event
                 total_prbs += event[2]
@@ -49,10 +57,7 @@ def extract_window_features(events, window_bsr_indices, historical_bsr_avg, wind
             elif event[0] == 0:  # SR event
                 sr_count += 1
         
-        # Calculate interval duration
         window_duration = end_bsr[3] - start_bsr[3]
-        
-        # Calculate rates for this interval
         bsr_per_prb = bsr_diff / (total_prbs + 1e-6)
         bsr_update_rate = 1000.0 / (window_duration + 1e-6)
         sr_rate = sr_count * 1000.0 / (window_duration + 1e-6)
@@ -67,76 +72,66 @@ def extract_window_features(events, window_bsr_indices, historical_bsr_avg, wind
             window_duration,  # Time duration
             bsr_update_rate,  # Rate of BSR updates
             sr_rate,         # Rate of SR events
+            time_until_prb,  # Time until first PRB after BSR
         ])
         
         all_features.append(interval_features)
     
-    # Concatenate all interval features
     return np.concatenate(all_features)
 
-def prepare_training_data(labeled_data, window_size=1):
+def prepare_training_data(labeled_data, window_size=1, feature_indices=None):
     """
     Prepare window-based features from labeled data
     Args:
         labeled_data: dictionary of RNTI to events
         window_size: number of BSR intervals to include in each window
-    Returns:
-        features: numpy array of shape (n_windows, n_features * window_size)
-        labels: numpy array of shape (n_windows,)
+        feature_indices: indices of features to use for each interval (0-8)
     """
     features = []
     labels = []
     
     for rnti, events in labeled_data.items():
-        # Find all BSR events
         bsr_indices = [i for i, event in enumerate(events) if event[0] == 1]
         
-        # Create windows with sliding window of size 1
         for i in range(len(bsr_indices) - window_size):
-            # Get indices for all BSRs in this window
             window_bsr_indices = bsr_indices[i:i + window_size + 1]
             
-            # Calculate historical BSR average
             historical_end = i
             historical_start = max(0, historical_end - 10)
             historical_bsrs = [events[bsr_indices[j]][1] for j in range(historical_start, historical_end)]
             historical_bsr_avg = np.mean(historical_bsrs) if historical_bsrs else events[window_bsr_indices[-1]][1]
             
-            # Extract features for all intervals in window
+            # Extract all features for the window
             window_features = extract_window_features(events, window_bsr_indices, historical_bsr_avg, window_size)
-            window_label = events[window_bsr_indices[-1]][5]  # Label from the last BSR
+            
+            # Reshape features to (window_size, 9) and select specified features for each interval
+            window_features = window_features.reshape(window_size, 9)
+            if feature_indices is not None:
+                window_features = window_features[:, feature_indices]
+            
+            # Flatten the features back to 1D array
+            window_features = window_features.flatten()
+            
+            window_label = events[window_bsr_indices[-1]][5]
             
             features.append(window_features)
             labels.append(window_label)
     
-    features = np.array(features)
-    labels = np.array(labels)
-    
-    return features, labels
+    return np.array(features), np.array(labels)
 
 def evaluate_per_rnti(model, scaler, val_data, model_name, feature_indices, window_size=1):
     """
     Evaluate model performance for each RNTI separately
-    Args:
-        model: trained model
-        scaler: fitted scaler
-        val_data: validation data dictionary
-        model_name: name of the model
-        feature_indices: indices of features to use
-        window_size: number of BSR intervals to include in each window
     """
     print(f"\nPer-RNTI Evaluation for {model_name}:")
     
     for rnti, events in val_data.items():
-        # Prepare data for this RNTI with the correct window size
-        X_val_rnti, y_val_rnti = prepare_training_data({rnti: events}, window_size)
+        # Prepare data for this RNTI with the correct window size and feature selection
+        X_val_rnti, y_val_rnti = prepare_training_data({rnti: events}, window_size, feature_indices)
         if len(X_val_rnti) == 0:
             continue
             
-        # Select features
-        X_val_rnti = X_val_rnti[:, feature_indices]
-            
-        # Scale features
+        # Scale features (no need to select features as it's done in prepare_training_data)
         X_val_scaled = scaler.transform(X_val_rnti)
         
         # Get predictions
@@ -188,34 +183,31 @@ def train_and_evaluate(train_files, val_file, output_dir, label_type, feature_in
     train_data = combine_data(train_files)
     val_data = np.load(val_file, allow_pickle=True).item()
     
-    # Prepare data
-    X_train, y_train = prepare_training_data(train_data, window_size)
-    X_val, y_val = prepare_training_data(val_data, window_size)
-    
-    # Select features
-    X_train = X_train[:, feature_indices]
-    X_val = X_val[:, feature_indices]
+    # Prepare data with feature selection
+    X_train, y_train = prepare_training_data(train_data, window_size, feature_indices)
+    X_val, y_val = prepare_training_data(val_data, window_size, feature_indices)
     
     # All feature names for one interval
     base_feature_names = [
         'BSR Difference',    # Change in BSR between two consecutive BSR events
         'Total PRBs',        # Sum of PRBs allocated in the window
         'SR Count',          # Number of SRs in the window
-        'End BSR',           # Value of the second BSR
-        'BSR per PRB',       # BSR difference normalized by total PRBs
+        'End BSR',           # Value of the end BSR
+        'BSR per PRB',       # BSR difference normalized by PRBs
         'Window Duration',    # Time duration between two BSR events
         'BSR Update Rate',    # Frequency of BSR updates
         'SR Rate',           # Frequency of SR events
+        'Time Until PRB',    # Time until first PRB after BSR
     ]
     
-    # Generate feature names for all intervals in the window
+    # Update feature names generation
+    selected_feature_names = [base_feature_names[i] for i in feature_indices]
     all_feature_names = []
     for i in range(window_size):
-        interval_names = [f"Interval_{i+1}_{name}" for name in base_feature_names]
+        interval_names = [f"Interval_{i+1}_{name}" for name in selected_feature_names]
         all_feature_names.extend(interval_names)
     
-    # Selected feature names
-    feature_names = [all_feature_names[i] for i in feature_indices]
+    feature_names = all_feature_names  # All names are already selected
     
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
@@ -388,11 +380,12 @@ def auto_train_and_evaluate(output_dir, feature_indices, seed=42, label_type='bs
         'BSR Difference',    # Change in BSR between two consecutive BSR events
         'Total PRBs',        # Sum of PRBs allocated in the window
         'SR Count',          # Number of SRs in the window
-        'End BSR',           # Value of the second BSR
-        'BSR per PRB',       # BSR difference normalized by total PRBs
+        'End BSR',           # Value of the end BSR
+        'BSR per PRB',       # BSR difference normalized by PRBs
         'Window Duration',    # Time duration between two BSR events
         'BSR Update Rate',    # Frequency of BSR updates
         'SR Rate',           # Frequency of SR events
+        'Time Until PRB',    # Time until first PRB after BSR
     ]
     
     # Generate feature names for all intervals in the window
@@ -538,11 +531,11 @@ def main():
                        help='Base directory for data files and output (default: labeled_data)')
     parser.add_argument('--output', default='models', 
                        help='Output directory name (will be created under base-dir)')
-    parser.add_argument('--features', type=str, default='0,1,2,3,4,5,6,7',
-                       help='Comma-separated list of feature indices to use (0-7). Features are: '
+    parser.add_argument('--features', type=str, default='0,1,2,3,4,5,6,7,8',
+                       help='Comma-separated list of feature indices to use (0-8). Features are: '
                             '0:BSR Difference, 1:Total PRBs, 2:SR Count, 3:End BSR, '
                             '4:BSR per PRB, 5:Window Duration, 6:BSR Update Rate, '
-                            '7:SR Rate')
+                            '7:SR Rate, 8:Time Until PRB')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for train-val split')
     parser.add_argument('--label-type', type=str, choices=['bsr_only', 'first_bsr'], 
                        default='bsr_only', help='Type of label to use')
@@ -554,19 +547,12 @@ def main():
     # Create full output path
     output_dir = os.path.join(args.base_dir, args.output)
     
-    # If features not specified, use all features for all intervals
-    if args.features == '0,1,2,3,4,5,6,7':  # default value
-        feature_indices = []
-        for i in range(args.window_size):
-            start_idx = i * 8  # Changed from 9 to 8
-            feature_indices.extend(range(start_idx, start_idx + 8))
-    else:
-        feature_indices = [int(i) for i in args.features.split(',')]
+    # Convert feature string to indices
+    feature_indices = [int(i) for i in args.features.split(',')]
     
     # Validate feature indices
-    max_feature_idx = 8 * args.window_size - 1  # Changed from 9 to 8
-    if not all(0 <= i <= max_feature_idx for i in feature_indices):
-        raise ValueError(f"Feature indices must be between 0 and {max_feature_idx}")
+    if not all(0 <= i <= 8 for i in feature_indices):  # Now just check if indices are valid for one interval
+        raise ValueError(f"Feature indices must be between 0 and 8")
     
     try:
         # Check validation file label type if provided
