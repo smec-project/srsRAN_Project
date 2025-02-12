@@ -2,3 +2,4 @@ build/*
 pets_controller/*.txt
 pets_controller/labeled_data/*
 pets_controller/models/*
+pets_controller/eval_data/*
