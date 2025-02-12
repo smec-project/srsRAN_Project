@@ -8,16 +8,20 @@ from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 import os
 from sklearn.preprocessing import StandardScaler
+import glob
+import random
 
-def extract_window_features(events, start_idx, end_idx):
+def extract_window_features(events, start_idx, end_idx, historical_bsr_avg):
     """
     Extract features for a window between two BSRs
     Args:
         events: list of events
         start_idx: index of first BSR
         end_idx: index of second BSR
+        historical_bsr_avg: average of up to 10 previous BSR values
     Returns:
-        features: [bsr_diff, total_prbs, sr_count, end_bsr_value, bsr_per_prb, window_duration]
+        features: [bsr_diff, total_prbs, sr_count, end_bsr_value, bsr_per_prb, window_duration,
+                  bsr_update_rate, sr_rate, prb_rate, bsr_congestion]
     """
     start_bsr = events[start_idx]
     end_bsr = events[end_idx]
@@ -28,25 +32,45 @@ def extract_window_features(events, start_idx, end_idx):
     # Get end BSR value
     end_bsr_value = end_bsr[1]  # The second BSR's value
     
-    # Calculate total PRBs in window
+    # Calculate total PRBs and count events in window
     total_prbs = 0
     sr_count = 0
+    prb_events = 0  # Count of PRB allocation events
     
     # Process events between BSRs
     for event in events[start_idx+1:end_idx]:
         if event[0] == 2:  # PRB event
             total_prbs += event[2]  # index 2 is PRBs
+            prb_events += 1
         elif event[0] == 0:  # SR event
             sr_count += 1
     
-    # Calculate combined features
-    # BSR difference per PRB: indicates how BSR changes with each PRB allocation
-    bsr_per_prb = bsr_diff / (total_prbs + 1e-6)  # Add small epsilon to avoid division by zero
-    
-    # Time duration between BSRs
+    # Calculate time duration between BSRs (in milliseconds)
     window_duration = end_bsr[3] - start_bsr[3]  # index 3 is timestamp
-            
-    return np.array([bsr_diff, total_prbs, sr_count, end_bsr_value, bsr_per_prb, window_duration])
+    
+    # Calculate BSR per PRB (with small epsilon to avoid division by zero)
+    bsr_per_prb = bsr_diff / (total_prbs + 1e-6)
+    
+    # Calculate rate features (events per second)
+    bsr_update_rate = 1000.0 / (window_duration + 1e-6)  # BSR updates per second
+    sr_rate = sr_count * 1000.0 / (window_duration + 1e-6)  # SR events per second
+    prb_rate = prb_events * 1000.0 / (window_duration + 1e-6)  # PRB allocation events per second
+    
+    # Calculate BSR congestion using provided historical average
+    bsr_congestion = end_bsr[1] / (historical_bsr_avg + 1e-6)  # Ratio of current BSR to historical average
+    
+    return np.array([
+        bsr_diff,         # Difference between consecutive BSR values
+        total_prbs,       # Total PRBs allocated in window
+        sr_count,         # Number of SR events in window
+        end_bsr_value,    # Value of the second BSR
+        bsr_per_prb,      # BSR difference normalized by total PRBs
+        window_duration,  # Time duration between BSRs
+        bsr_update_rate, # Rate of BSR updates
+        sr_rate,         # Rate of SR events
+        prb_rate,        # Rate of PRB allocation events
+        bsr_congestion   # Current BSR relative to historical average
+    ])
 
 def prepare_training_data(labeled_data):
     """
@@ -67,7 +91,13 @@ def prepare_training_data(labeled_data):
             start_idx = bsr_indices[i]
             end_idx = bsr_indices[i+1]
             
-            window_features = extract_window_features(events, start_idx, end_idx)
+            # Calculate historical BSR average (up to 10 previous BSRs)
+            historical_end = i  # Current BSR index in bsr_indices
+            historical_start = max(0, historical_end - 10)  # Look back up to 10 BSRs
+            historical_bsrs = [events[bsr_indices[j]][1] for j in range(historical_start, historical_end)]
+            historical_bsr_avg = np.mean(historical_bsrs) if historical_bsrs else events[end_idx][1]
+            
+            window_features = extract_window_features(events, start_idx, end_idx, historical_bsr_avg)
             window_label = events[end_idx][5]
             
             features.append(window_features)
@@ -116,16 +146,34 @@ def evaluate_per_rnti(model, scaler, val_data, model_name, feature_indices):
         print(f"    TN: {tn}, FP: {fp}")
         print(f"    FN: {fn}, TP: {tp}")
 
-def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type, feature_indices):
+def combine_data(data_files):
+    """
+    Combine multiple .npy files into one dataset
+    Each RNTI will be prefixed with its source file name to avoid conflicts
+    """
+    combined_data = {}
+    for file in data_files:
+        # Get a unique prefix from the file name
+        file_prefix = os.path.splitext(os.path.basename(file))[0]
+        
+        data = np.load(file, allow_pickle=True).item()
+        for rnti, events in data.items():
+            # Create a unique key by combining file prefix and RNTI
+            unique_key = f"{file_prefix}_{rnti}"
+            combined_data[unique_key] = events
+    
+    return combined_data
+
+def train_and_evaluate(train_files, val_file, output_dir, label_type, feature_indices):
     """
     Train and evaluate the model using selected features
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
-    # Load data
-    train_data = np.load(train_data_file, allow_pickle=True).item()
-    val_data = np.load(val_data_file, allow_pickle=True).item()
+    # Load and combine training data
+    train_data = combine_data(train_files)
+    val_data = np.load(val_file, allow_pickle=True).item()
     
     # Prepare data
     X_train, y_train = prepare_training_data(train_data)
@@ -142,7 +190,11 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type, f
         'SR Count',          # Number of SRs in the window
         'End BSR',           # Value of the second BSR
         'BSR per PRB',       # BSR difference normalized by total PRBs
-        'Window Duration'    # Time duration between two BSR events
+        'Window Duration',    # Time duration between two BSR events
+        'BSR Update Rate',    # Frequency of BSR updates
+        'SR Rate',           # Frequency of SR events
+        'PRB Rate',          # Frequency of PRB allocations
+        'BSR Congestion',     # Current BSR relative to historical average
     ]
     
     # Selected feature names
@@ -252,46 +304,321 @@ def train_and_evaluate(train_data_file, val_data_file, output_dir, label_type, f
     
     return results
 
+def find_all_data_files(label_type, base_dir="labeled_data"):
+    """
+    Find all files with specified label type in base directory
+    Args:
+        label_type: 'bsr_only' or 'first_bsr'
+        base_dir: base directory to search in
+    Returns:
+        list of file paths
+    """
+    pattern = os.path.join(base_dir, "**", f"*_{label_type}.npy")
+    files = glob.glob(pattern, recursive=True)
+    if not files:
+        raise ValueError(f"No *_{label_type}.npy files found in {base_dir} directory")
+    return sorted(files)
+
+def auto_train_and_evaluate(output_dir, feature_indices, seed=42, label_type='bsr_only'):
+    """
+    Automatically load all data files, extract features, split and train
+    """
+    print("\nAuto mode: Finding all data files...")
+    all_files = find_all_data_files(label_type)
+    print(f"Found {len(all_files)} data files:")
+    for f in all_files:
+        print(f"  {f}")
+    
+    # Load and combine all data
+    all_data = combine_data(all_files)
+    
+    # Extract features from all data
+    X_all, y_all = prepare_training_data(all_data)
+    
+    # Select features
+    X_all = X_all[:, feature_indices]
+    
+    # Split data
+    random.seed(seed)
+    indices = list(range(len(X_all)))
+    random.shuffle(indices)
+    
+    split_idx = int(len(X_all) * 0.8)
+    train_indices = indices[:split_idx]
+    val_indices = indices[split_idx:]
+    
+    X_train = X_all[train_indices]
+    y_train = y_all[train_indices]
+    X_val = X_all[val_indices]
+    y_val = y_all[val_indices]
+    
+    print("\nData split statistics:")
+    print(f"Total samples: {len(X_all)}")
+    print(f"Training samples: {len(X_train)}")
+    print(f"Validation samples: {len(X_val)}")
+    
+    # Get label type from first file
+    label_type = os.path.basename(all_files[0]).split('_')[-1].split('.')[0]
+    
+    # Scale features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_val_scaled = scaler.transform(X_val)
+    
+    # All feature names
+    all_feature_names = [
+        'BSR Difference',    # Change in BSR between two consecutive BSR events
+        'Total PRBs',        # Sum of PRBs allocated in the window
+        'SR Count',          # Number of SRs in the window
+        'End BSR',           # Value of the second BSR
+        'BSR per PRB',       # BSR difference normalized by total PRBs
+        'Window Duration',    # Time duration between two BSR events
+        'BSR Update Rate',    # Frequency of BSR updates
+        'SR Rate',           # Frequency of SR events
+        'PRB Rate',          # Frequency of PRB allocations
+        'BSR Congestion',     # Current BSR relative to historical average
+    ]
+    
+    # Selected feature names
+    feature_names = [all_feature_names[i] for i in feature_indices]
+    
+    print("\nUsing features:", ", ".join(feature_names))
+    
+    # Train models
+    models = {
+        'decision_tree': DecisionTreeClassifier(
+            max_depth=10,
+            min_samples_split=10,
+            class_weight='balanced'
+        ),
+        'random_forest': RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            min_samples_split=10,
+            class_weight='balanced',
+            n_jobs=-1
+        ),
+        'xgboost': xgb.XGBClassifier(
+            n_estimators=100,
+            max_depth=10,
+            learning_rate=0.1,
+            scale_pos_weight=np.sum(y_train == 0) / np.sum(y_train == 1),
+            n_jobs=-1
+        ),
+        'lightgbm': lgb.LGBMClassifier(
+            n_estimators=100,
+            max_depth=10,
+            learning_rate=0.1,
+            min_child_samples=20,
+            min_split_gain=1e-3,
+            num_leaves=31,
+            scale_pos_weight=np.sum(y_train == 0) / np.sum(y_train == 1),
+            n_jobs=-1,
+            verbose=-1
+        )
+    }
+    
+    results = {}
+    for model_name, model in models.items():
+        print(f"\nTraining {model_name} for {label_type}...")
+        
+        model.fit(X_train_scaled, y_train)
+        y_pred = model.predict(X_val_scaled)
+        
+        # Detailed evaluation
+        print(f"\nOverall Validation Results for {model_name}:")
+        
+        # Calculate metrics
+        accuracy = np.mean(y_val == y_pred)
+        tn, fp, fn, tp = confusion_matrix(y_val, y_pred).ravel()
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        
+        # Print detailed statistics
+        print("\nOverall Statistics:")
+        print(f"Total samples: {len(y_val)}")
+        print(f"Positive samples: {np.sum(y_val == 1)}")
+        print(f"Negative samples: {np.sum(y_val == 0)}")
+        print(f"Accuracy: {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall: {recall:.4f}")
+        print(f"F1-score: {f1:.4f}")
+        
+        print("\nDetailed Metrics:")
+        print("True Negatives (TN):", tn)
+        print("False Positives (FP):", fp)
+        print("False Negatives (FN):", fn)
+        print("True Positives (TP):", tp)
+        
+        print("\nRates:")
+        print(f"False Positive Rate: {fp/(fp+tn):.4f}")
+        print(f"False Negative Rate: {fn/(fn+tp):.4f}")
+        print(f"True Positive Rate (Recall): {tp/(tp+fn):.4f}")
+        print(f"True Negative Rate: {tn/(tn+fp):.4f}")
+        
+        print("\nClassification Report:")
+        print(classification_report(y_val, y_pred))
+        
+        print("\nConfusion Matrix:")
+        print(confusion_matrix(y_val, y_pred))
+        
+        # Save model and scaler
+        model_path = os.path.join(output_dir, f"{label_type}_{model_name}.joblib")
+        scaler_path = os.path.join(output_dir, f"{label_type}_scaler.joblib")
+        joblib.dump(model, model_path)
+        joblib.dump(scaler, scaler_path)
+        print(f"\nModel saved to {model_path}")
+        print(f"Scaler saved to {scaler_path}")
+        
+        results[model_name] = {
+            'model': model,
+            'scaler': scaler,
+            'predictions': y_pred,
+            'model_path': model_path,
+            'scaler_path': scaler_path,
+            'metrics': {
+                'accuracy': accuracy,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'tn': tn,
+                'fp': fp,
+                'fn': fn,
+                'tp': tp
+            }
+        }
+        
+        print("\nFeature Importance:")
+        importances = model.feature_importances_
+        for name, importance in zip(feature_names, importances):
+            print(f"{name}: {importance:.4f}")
+        
+        # Print feature importance ranking
+        importance_pairs = list(zip(feature_names, importances))
+        importance_pairs.sort(key=lambda x: x[1], reverse=True)
+        print("\nFeature Importance Ranking:")
+        for name, importance in importance_pairs:
+            print(f"{name}: {importance:.4f}")
+    
+    return results
+
+def check_file_label_type(file_path, expected_label_type):
+    """
+    Check if the file name matches the expected label type
+    Returns:
+        bool: True if matches, False otherwise
+    """
+    # Get the base name of the file and check if it ends with expected label type
+    base_name = os.path.basename(file_path)
+    return base_name.endswith(f"_{expected_label_type}.npy")
+
 def main():
     parser = argparse.ArgumentParser(description='Train and evaluate request prediction models')
-    parser.add_argument('train_file', help='Path to training data file (.npy)')
-    parser.add_argument('val_file', help='Path to validation data file (.npy)')
-    parser.add_argument('--output', default='models', help='Output directory for trained models')
-    parser.add_argument('--features', type=str, default='0,1,2,3,4,5',
-                       help='Comma-separated list of feature indices to use (0-5). Features are: '
+    parser.add_argument('--train', nargs='*', help='Path to training data files (.npy)')
+    parser.add_argument('--val', help='Path to validation data file (.npy)')
+    parser.add_argument('--base-dir', default='labeled_data', 
+                       help='Base directory for data files and output (default: labeled_data)')
+    parser.add_argument('--output', default='models', 
+                       help='Output directory name (will be created under base-dir)')
+    parser.add_argument('--features', type=str, default='0,1,2,3,4,5,6,7,8,9',
+                       help='Comma-separated list of feature indices to use (0-9). Features are: '
                             '0:BSR Difference, 1:Total PRBs, 2:SR Count, 3:End BSR, '
-                            '4:BSR per PRB, 5:Window Duration')
+                            '4:BSR per PRB, 5:Window Duration, 6:BSR Update Rate, '
+                            '7:SR Rate, 8:PRB Rate, 9:BSR Congestion')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for train-val split')
+    parser.add_argument('--label-type', type=str, choices=['bsr_only', 'first_bsr'], 
+                       default='bsr_only', help='Type of label to use')
     
     args = parser.parse_args()
+    
+    # Create full output path
+    output_dir = os.path.join(args.base_dir, args.output)
     
     # Parse feature indices
     try:
         feature_indices = [int(i) for i in args.features.split(',')]
-        # Validate indices
-        if not all(0 <= i <= 5 for i in feature_indices):
-            raise ValueError("Feature indices must be between 0 and 5")
+        if not all(0 <= i <= 9 for i in feature_indices):
+            raise ValueError("Feature indices must be between 0 and 9")
     except ValueError as e:
         print(f"Error parsing feature indices: {e}")
         return
     
-    # Check if files exist
-    if not os.path.exists(args.train_file):
-        print(f"Error: Training file not found: {args.train_file}")
+    try:
+        # Check validation file label type if provided
+        if args.val and not check_file_label_type(args.val, args.label_type):
+            print(f"Error: Validation file does not match label type '{args.label_type}'")
+            print(f"File: {args.val}")
+            return
+        
+        # Check training files label type if provided
+        if args.train:
+            mismatched_files = [f for f in args.train if not check_file_label_type(f, args.label_type)]
+            if mismatched_files:
+                print(f"Error: Some training files do not match label type '{args.label_type}':")
+                for f in mismatched_files:
+                    print(f"  {f}")
+                return
+        
+        if args.train is None and args.val is None:  # Full auto mode
+            print(f"\nAuto mode - Using all available {args.label_type} data")
+            results = auto_train_and_evaluate(output_dir, feature_indices, args.seed, args.label_type)
+            
+        elif args.train is None and args.val:  # Only validation file provided
+            if not os.path.exists(args.val):
+                print(f"Error: Validation file not found: {args.val}")
+                return
+                
+            # Find all training files except the validation file
+            all_files = find_all_data_files(args.label_type, args.base_dir)
+            val_file_abs = os.path.abspath(args.val)
+            train_files = [f for f in all_files if os.path.abspath(f) != val_file_abs]
+            
+            if not train_files:
+                print("Error: No training files found")
+                return
+                
+            print(f"\nAuto-train mode with specified validation - Using {args.label_type} data")
+            print("Training files:")
+            for f in train_files:
+                print(f"  {f}")
+            print(f"Validation file: {args.val}")
+            print(f"Using features: {args.features}")
+            
+            # Use original training function to get per-RNTI evaluation
+            results = train_and_evaluate(train_files, args.val, output_dir, args.label_type, feature_indices)
+            
+        elif args.train and args.val:  # Manual mode
+            # Check if files exist
+            for train_file in args.train:
+                if not os.path.exists(train_file):
+                    print(f"Error: Training file not found: {train_file}")
+                    return
+            
+            if not os.path.exists(args.val):
+                print(f"Error: Validation file not found: {args.val}")
+                return
+                
+            # Use original training function
+            print(f"\nManual mode - Using {args.label_type} data")
+            print("Training files:")
+            for file in args.train:
+                print(f"  {file}")
+            print(f"Validation file: {args.val}")
+            print(f"Using features: {args.features}")
+            
+            results = train_and_evaluate(args.train, args.val, output_dir, args.label_type, feature_indices)
+            
+        else:  # Invalid combination
+            print("Error: Invalid argument combination. Use either:")
+            print("  1. No arguments (auto mode)")
+            print("  2. Only --val (auto-train mode)")
+            print("  3. Both --train and --val (manual mode)")
+            return
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")
         return
-    
-    if not os.path.exists(args.val_file):
-        print(f"Error: Validation file not found: {args.val_file}")
-        return
-    
-    # Get label type from filename
-    label_type = os.path.basename(args.train_file).split('_')[-1].split('.')[0]
-    
-    print(f"\nProcessing {label_type} labels...")
-    print(f"Training file: {args.train_file}")
-    print(f"Validation file: {args.val_file}")
-    print(f"Using features: {args.features}")
-    
-    results = train_and_evaluate(args.train_file, args.val_file, args.output, label_type, feature_indices)
 
 if __name__ == "__main__":
     main()
