@@ -27,6 +27,8 @@ class TrainDataLabeler:
         """
         Parse the log file and extract all events including request start/end
         """
+        request_start_seq = 1
+        request_end_seq = 1
         with open(filename, 'r') as f:
             for line in f:
                 try:
@@ -45,9 +47,11 @@ class TrainDataLabeler:
                         self.active_rntis.add(rnti)
                         
                         if 'start at' in line:
-                            self.add_event(rnti, timestamp, 'REQUEST_START', {'seq': seq_num})
+                            self.add_event(rnti, timestamp, 'REQUEST_START', {'seq': request_start_seq})
+                            request_start_seq += 1
                         elif 'completed in' in line:
-                            self.add_event(rnti, timestamp, 'REQUEST_END', {'seq': seq_num})
+                            self.add_event(rnti, timestamp, 'REQUEST_END', {'seq': request_end_seq})
+                            request_end_seq += 1
                         continue
 
                     if 'SR received' in line:
@@ -73,6 +77,7 @@ class TrainDataLabeler:
                     continue
 
         # After parsing, remove events for RNTIs without requests
+        print(request_start_seq, request_end_seq)
         self.events = {rnti: events for rnti, events in self.events.items() if rnti in self.active_rntis}
 
     def add_event(self, rnti, timestamp, event_type, value=None):
@@ -721,13 +726,15 @@ def main():
     parser.add_argument('log_file', help='Path to the log file to process')
     parser.add_argument('--output', help='Output file path for labeled data (.npy)')
     parser.add_argument('--threads', type=int, help='Number of threads to use', default=16)
+    parser.add_argument('--base-dir', default='labeled_data', 
+                       help='Base directory for output (default: labeled_data)')
     
     args = parser.parse_args()
     
     if args.output is None:
         input_filename = args.log_file.split('/')[-1]
         base_name = input_filename.rsplit('.', 1)[0]
-        output_dir = f"labeled_data/{base_name}"
+        output_dir = f"{args.base_dir}/{base_name}"
         os.makedirs(output_dir, exist_ok=True)
         args.output = f"{output_dir}/{base_name}"
     
