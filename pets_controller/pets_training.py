@@ -304,7 +304,14 @@ def train_and_evaluate(train_files, val_file, output_dir, label_type, feature_in
         print(f"Model saved to {model_path}")
         print(f"Scaler saved to {scaler_path}")
         
-        # Store results
+        # Print feature importance
+        print("\nFeature Importance Ranking:")
+        importances = model.feature_importances_
+        importance_pairs = list(zip(feature_names, importances))
+        importance_pairs.sort(key=lambda x: x[1], reverse=True)  # 按重要性降序排序
+        for name, importance in importance_pairs:
+            print(f"{name}: {importance:.4f}")
+        
         results[model_name] = {
             'model': model,
             'scaler': scaler,
@@ -312,12 +319,6 @@ def train_and_evaluate(train_files, val_file, output_dir, label_type, feature_in
             'model_path': model_path,
             'scaler_path': scaler_path
         }
-        
-        # Print feature importance
-        print("\nFeature Importance:")
-        importances = model.feature_importances_
-        for name, importance in zip(feature_names, importances):
-            print(f"{name}: {importance:.4f}")
     
     return results
 
@@ -510,15 +511,10 @@ def auto_train_and_evaluate(output_dir, feature_indices, seed=42, label_type='bs
             }
         }
         
-        print("\nFeature Importance:")
-        importances = model.feature_importances_
-        for name, importance in zip(feature_names, importances):
-            print(f"{name}: {importance:.4f}")
-        
-        # Print feature importance ranking
-        importance_pairs = list(zip(feature_names, importances))
-        importance_pairs.sort(key=lambda x: x[1], reverse=True)
         print("\nFeature Importance Ranking:")
+        importances = model.feature_importances_
+        importance_pairs = list(zip(feature_names, importances))
+        importance_pairs.sort(key=lambda x: x[1], reverse=True)  # 按重要性降序排序
         for name, importance in importance_pairs:
             print(f"{name}: {importance:.4f}")
     
