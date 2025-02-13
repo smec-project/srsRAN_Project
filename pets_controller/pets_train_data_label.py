@@ -220,17 +220,12 @@ class TrainDataLabeler:
                             quantized_events[i][5] = 1  # Set is_new_request
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 0 and current_bsr['value']['bytes'] != 0:
+                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0:
                             quantized_events[i][5] = 1
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and current_bsr['value']['bytes'] != 0:
-                            if prb_count > 100:
-                                quantized_events[i][5] = 1
-                                found_increase = True
-                                break
-                            else:
-                                prb_count = 0
+                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes']:
+                            prb_count = 0
 
                     elif current_bsr['value']['bytes'] > 0:
                         quantized_events[i][5] = 1
