@@ -188,40 +188,62 @@ class TrainDataLabeler:
 
         # Process each request independently
         for start_idx, end_idx, seq_num in request_pairs:
-            # Find last BSR before this request
+            # First find the first unlabeled BSR in this request
+            first_unlabeled_bsr_idx = None
+            for i in range(start_idx, end_idx+1):
+                if events[i]['type'] == 'BSR' and quantized_events[i][5] == 0:
+                    first_unlabeled_bsr_idx = i
+                    break
+            
+            if first_unlabeled_bsr_idx is None:
+                continue  # No unlabeled BSR in this request
+                
+            # Now find the last BSR before the first unlabeled BSR
             last_bsr = None
-            for i in range(start_idx-1, -1, -1):
+            prb_count = 0
+            for i in range(first_unlabeled_bsr_idx-1, -1, -1):
                 if events[i]['type'] == 'BSR':
                     last_bsr = events[i]
                     break
+                if events[i]['type'] == 'PRB':
+                    prb_count += events[i]['value']['prbs']
             outside_last_bsr = last_bsr
             
             found_increase = False
-            first_bsr_in_request = None
             
-            # Process BSRs in this request
-            for i in range(start_idx, end_idx+1):
+            # Process BSRs in this request, starting from first unlabeled BSR
+            for i in range(first_unlabeled_bsr_idx, end_idx+1):
                 if events[i]['type'] == 'BSR':
                     current_bsr = events[i]
-                    if first_bsr_in_request is None:
-                        first_bsr_in_request = i
-                        
                     if last_bsr is not None:
                         if current_bsr['value']['bytes'] > last_bsr['value']['bytes']:
                             quantized_events[i][5] = 1  # Set is_new_request
                             found_increase = True
                             break
+                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 0 and current_bsr['value']['bytes'] != 0:
+                            quantized_events[i][5] = 1
+                            found_increase = True
+                            break
+                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and current_bsr['value']['bytes'] != 0:
+                            if prb_count > 100:
+                                quantized_events[i][5] = 1
+                                found_increase = True
+                                break
+                            else:
+                                prb_count = 0
+
                     elif current_bsr['value']['bytes'] > 0:
                         quantized_events[i][5] = 1
                         found_increase = True
                         break
                     last_bsr = current_bsr  # Update last_bsr after comparison
+                elif events[i]['type'] == 'PRB':
+                    prb_count += events[i]['value']['prbs']
             
-            # If no increase found, mark the first BSR in request
-            if not found_increase and first_bsr_in_request is not None:
-                quantized_events[first_bsr_in_request][5] = 1
-                
+            # If no increase found, mark the first unlabeled BSR
             if not found_increase:
+                quantized_events[first_unlabeled_bsr_idx][5] = 1
+                
                 # Collect BSRs in this request for analysis
                 request_bsrs = [e for e in events[start_idx:end_idx+1] 
                               if e['type'] == 'BSR']
@@ -899,8 +921,8 @@ def main():
     np.save(f"{args.output}_first_bsr.npy", labeled_data_first_bsr)
     
     # Print information about saved data
-    # print_numpy_data_info("BSR-only", labeled_data)
-    # print_full_events_info(labeled_full_data)  # Print full events info
+    print_numpy_data_info("BSR-only", labeled_data)
+    print_full_events_info(labeled_full_data)  # Print full events info
     # print_numpy_data_info("SR+BSR", labeled_data_with_sr)
     # print_numpy_data_info("First Event", labeled_data_first_event)
     # print_numpy_data_info("First BSR", labeled_data_first_bsr)
