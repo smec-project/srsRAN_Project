@@ -207,7 +207,7 @@ class TrainDataLabeler:
                         first_bsr_in_request = i
                         
                     if last_bsr is not None:
-                        if current_bsr['value']['bytes'] >= last_bsr['value']['bytes']:
+                        if current_bsr['value']['bytes'] > last_bsr['value']['bytes']:
                             quantized_events[i][5] = 1  # Set is_new_request
                             found_increase = True
                             break
@@ -638,9 +638,94 @@ class TrainDataLabeler:
             
             print(f"{info['seq']:6d} | {start_time_ms:11.2f} | {event_time_ms:11.2f} | {time_diff:11.2f}")
 
+    def generate_full_events(self, target_rnti):
+        """
+        Generate a dataset containing all events including REQUEST_START/END
+        The 6th column will store request sequence number
+        The 7th column will store BSR labels (from bsr_only analysis)
+        """
+        if target_rnti not in self.events:
+            print(f"No events found for RNTI {target_rnti}")
+            return None
+
+        # First get BSR labels from bsr_only analysis
+        bsr_only_data = self.analyze_ue_events(target_rnti)
+        if bsr_only_data is None:
+            return None
+        
+        # Sort events by timestamp
+        events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
+        
+        # Set base time for all events
+        base_time = events[0]['timestamp']
+        for event in events:
+            event['base_time'] = base_time
+        
+        # Calculate time differences between all consecutive events
+        for i in range(1, len(events)):
+            time_diff = (events[i]['timestamp'] - events[i-1]['timestamp']) * 1000
+            events[i]['time_diff'] = time_diff
+        events[0]['time_diff'] = 0
+        
+        # Create BSR count to index mapping for both datasets
+        events_bsr_map = {}  # BSR count -> index in events
+        bsr_count = 0
+        for i, event in enumerate(events):
+            if event['type'] == 'BSR':
+                events_bsr_map[bsr_count] = i
+                bsr_count += 1
+            
+        bsr_only_labels = {}  # BSR count -> label
+        bsr_count = 0
+        for event in bsr_only_data:
+            if event[0] == 1:  # BSR event
+                bsr_only_labels[bsr_count] = event[5]
+                bsr_count += 1
+        
+        # Create final BSR index to label mapping
+        bsr_labels = {}  # index in events -> label
+        for count, index in events_bsr_map.items():
+            if count in bsr_only_labels:
+                bsr_labels[index] = bsr_only_labels[count]
+        
+        # Process events and store request sequence numbers
+        quantized_events = []
+        
+        for i, event in enumerate(events):
+            # Initialize event data
+            event_type = self.EVENT_TYPES[event['type']]
+            bsr_bytes = event['value']['bytes'] if event['type'] == 'BSR' else 0
+            prbs = event['value']['prbs'] if event['type'] == 'PRB' else 0
+            rel_time = (event['timestamp'] - base_time) * 1000
+            time_diff = event['time_diff']
+            
+            # Set request sequence number
+            if event['type'] in ['REQUEST_START', 'REQUEST_END']:
+                seq_num = event['value']['seq']
+            else:
+                seq_num = 0
+            
+            # Set BSR label using index mapping
+            bsr_label = bsr_labels.get(i, 0)
+            
+            # Create quantized event with BSR label
+            quantized_event = np.array([
+                event_type,      # Event type (SR=0, BSR=1, PRB=2, REQ_START=3, REQ_END=4)
+                bsr_bytes,       # BSR bytes
+                prbs,           # PRBs
+                rel_time,       # Relative time (ms)
+                time_diff,      # Time difference from previous event (ms)
+                seq_num,        # Request sequence number
+                bsr_label       # BSR label (from bsr_only analysis)
+            ], dtype=np.float32)
+            
+            quantized_events.append(quantized_event)
+        
+        return np.array(quantized_events)
+
     def analyze_all_ues(self):
         """
-        Analyze events for all UEs that have requests using multiple processes
+        Analyze events for all UEs and generate both filtered and full datasets
         """
         print(f"\nFound {len(self.active_rntis)} RNTIs with requests: {sorted(self.active_rntis)}")
         
@@ -654,27 +739,28 @@ class TrainDataLabeler:
         # Process RNTIs in parallel
         results = pool.map(process_func, sorted(self.active_rntis))
         
-        # Close the pool
         pool.close()
         pool.join()
         
         # Organize results
         all_ue_data = {}
+        all_ue_full_data = {}  # New dictionary for full event data
         all_ue_data_with_sr = {}
         all_ue_data_first_event = {}
         all_ue_data_first_bsr = {}
         
-        for rnti, (ue_data, ue_data_with_sr, ue_data_first_event, ue_data_first_bsr) in results:
+        for rnti, (ue_data, ue_full_data, ue_data_with_sr, ue_data_first_event, ue_data_first_bsr) in results:
             if ue_data is not None:
                 all_ue_data[rnti] = ue_data
+                all_ue_full_data[rnti] = ue_full_data
             if ue_data_with_sr is not None:
                 all_ue_data_with_sr[rnti] = ue_data_with_sr
             if ue_data_first_event is not None:
                 all_ue_data_first_event[rnti] = ue_data_first_event
             if ue_data_first_bsr is not None:
                 all_ue_data_first_bsr[rnti] = ue_data_first_bsr
-                
-        return all_ue_data, all_ue_data_with_sr, all_ue_data_first_event, all_ue_data_first_bsr
+        
+        return all_ue_data, all_ue_full_data, all_ue_data_with_sr, all_ue_data_first_event, all_ue_data_first_bsr
 
 def print_numpy_data_info(label_type, data):
     """
@@ -706,7 +792,58 @@ def print_numpy_data_info(label_type, data):
             print(f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:11.2f} | {label:5}")
         print("-" * 70)
 
-def process_single_rnti(rnti, events_dict, print_info=True):
+def print_full_events_info(data):
+    """
+    Print information about the full events data (including REQUEST events)
+    Args:
+        data: dictionary of RNTI to full event arrays
+    """
+    print("\nFull Events Data Analysis:")
+    print(f"Number of RNTIs: {len(data)}")
+    
+    for rnti, ue_data in data.items():
+        print(f"\nRNTI {rnti}:")
+        # Count total events
+        total_events = len(ue_data)
+        
+        # Count event types
+        sr_count = np.sum(ue_data[:, 0] == 0)     # SR type is 0
+        bsr_count = np.sum(ue_data[:, 0] == 1)    # BSR type is 1
+        prb_count = np.sum(ue_data[:, 0] == 2)    # PRB type is 2
+        req_start_count = np.sum(ue_data[:, 0] == 3)  # REQUEST_START is 3
+        req_end_count = np.sum(ue_data[:, 0] == 4)    # REQUEST_END is 4
+        
+        # Count unique request sequences (excluding 0)
+        unique_requests = len(np.unique(ue_data[ue_data[:, 5] > 0, 5]))
+        
+        print(f"Total events: {total_events}")
+        print(f"Event distribution:")
+        print(f"  SR: {sr_count}")
+        print(f"  BSR: {bsr_count}")
+        print(f"  PRB: {prb_count}")
+        print(f"  REQUEST_START: {req_start_count}")
+        print(f"  REQUEST_END: {req_end_count}")
+        print(f"Number of unique requests: {unique_requests}")
+        
+        print("\nAll events details:")
+        print("Type      | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) | ReqSeq | BSR_Label")
+        for event in ue_data:
+            event_type = {
+                0: "SR",
+                1: "BSR",
+                2: "PRB",
+                3: "REQ_START",
+                4: "REQ_END"
+            }.get(event[0], "UNKNOWN")
+            
+            req_seq = int(event[5])
+            req_seq_str = str(req_seq) if req_seq > 0 else "0"
+            bsr_label = "1" if event[6] == 1 else "0"
+            
+            print(f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:11.2f} | {req_seq_str:6} | {bsr_label:9}")
+        print("-" * 80)
+
+def process_single_rnti(rnti, events_dict=None):
     """
     Process a single RNTI's data
     """
@@ -714,16 +851,14 @@ def process_single_rnti(rnti, events_dict, print_info=True):
     labeler.events = {rnti: events_dict[rnti]}
     labeler.active_rntis = {rnti}
     
-    if print_info:
-        print(f"\nAnalyzing RNTI {rnti}:")
-    
     # Run all analyses
     ue_data = labeler.analyze_ue_events(rnti)
+    ue_full_data = labeler.generate_full_events(rnti)
     ue_data_with_sr, _ = labeler.analyze_ue_events_with_sr(rnti)
     ue_data_first_event, _ = labeler.analyze_ue_events_first_event(rnti)
     ue_data_first_bsr, _ = labeler.analyze_ue_events_first_bsr(rnti)
     
-    return rnti, (ue_data, ue_data_with_sr, ue_data_first_event, ue_data_first_bsr)
+    return rnti, (ue_data, ue_full_data, ue_data_with_sr, ue_data_first_event, ue_data_first_bsr)
 
 def main():
     parser = argparse.ArgumentParser(description='Process log file and generate training data labels')
@@ -751,27 +886,29 @@ def main():
     
     labeler = TrainDataLabeler()
     labeler.parse_log_file(args.log_file)
-    labeled_data, labeled_data_with_sr, labeled_data_first_event, labeled_data_first_bsr = labeler.analyze_all_ues()
+    labeled_data, labeled_full_data, labeled_data_with_sr, labeled_data_first_event, labeled_data_first_bsr = labeler.analyze_all_ues()
     
     end_time = time.time()
     print(f"\nProcessing time: {end_time - start_time:.2f} seconds")
     
     # Save all versions of labeled data
     np.save(f"{args.output}_bsr_only.npy", labeled_data)
+    np.save(f"{args.output}_full_events.npy", labeled_full_data)  # Save full events data
     np.save(f"{args.output}_sr_bsr.npy", labeled_data_with_sr)
     np.save(f"{args.output}_first_event.npy", labeled_data_first_event)
     np.save(f"{args.output}_first_bsr.npy", labeled_data_first_bsr)
     
     # Print information about saved data
-    # print("\nAnalyzing saved labeled data:")
-    print_numpy_data_info("BSR-only", labeled_data)
-    print_numpy_data_info("SR+BSR", labeled_data_with_sr)
-    print_numpy_data_info("First Event", labeled_data_first_event)
-    print_numpy_data_info("First BSR", labeled_data_first_bsr)
+    # print_numpy_data_info("BSR-only", labeled_data)
+    # print_full_events_info(labeled_full_data)  # Print full events info
+    # print_numpy_data_info("SR+BSR", labeled_data_with_sr)
+    # print_numpy_data_info("First Event", labeled_data_first_event)
+    # print_numpy_data_info("First BSR", labeled_data_first_bsr)
     
     print(f"\nLabeled data saved to directory: labeled_data/{base_name}/")
     print(f"Files:")
     print(f"BSR-only: {base_name}_bsr_only.npy")
+    print(f"Full Events: {base_name}_full_events.npy")  # Add to output list
     print(f"SR+BSR: {base_name}_sr_bsr.npy")
     print(f"First Event: {base_name}_first_event.npy")
     print(f"First BSR: {base_name}_first_bsr.npy")
