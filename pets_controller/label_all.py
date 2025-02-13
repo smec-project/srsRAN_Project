@@ -40,11 +40,11 @@ def main():
             processed_base_files.add(base_txt.name)
 
     # Process all txt files in current directory except those already processed
-    # print("\nProcessing remaining txt files...")
-    # for txt_file in Path('.').glob('*.txt'):
-    #     if txt_file.name not in processed_base_files:
-    #         print(f"Processing file: {txt_file}")
-            # run_pets_train_data_label(txt_file)
+    print("\nProcessing remaining txt files...")
+    for txt_file in Path('.').glob('*.txt'):
+        if txt_file.name not in processed_base_files:
+            print(f"Processing file: {txt_file}")
+            run_pets_train_data_label(txt_file)
 
 if __name__ == "__main__":
     main() 
