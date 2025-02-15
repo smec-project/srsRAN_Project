@@ -541,7 +541,9 @@ def main():
                        default='bsr_only', help='Type of label to use')
     parser.add_argument('--window-size', type=int, default=1,
                        help='Number of BSR intervals to include in each window (default: 1)')
-    
+    parser.add_argument('--model', type=str, choices=['decision_tree', 'random_forest', 'xgboost', 'lightgbm'],
+                       help='Model to use for evaluation')
+
     args = parser.parse_args()
     
     # Create full output path
@@ -555,7 +557,28 @@ def main():
         raise ValueError(f"Feature indices must be between 0 and 8")
     
     try:
-        # Check validation file label type if provided
+        if args.model:
+            if not args.val:
+                print("Error: Validation file must be provided when using --model")
+                return
+                
+            # Load model and scaler
+            model_path = os.path.join("labeled_data/models", f"{args.label_type}_{args.model}.joblib")
+            scaler_path = os.path.join("labeled_data/models", f"{args.label_type}_scaler.joblib")
+            
+            if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+                print(f"Error: Model or scaler not found at {model_path}")
+                return
+                
+            model = joblib.load(model_path)
+            scaler = joblib.load(scaler_path)
+            val_data = np.load(args.val, allow_pickle=True).item()
+            
+            # Evaluate model
+            print(f"\nEvaluating {args.model} on validation data...")
+            evaluate_per_rnti(model, scaler, val_data, args.model, feature_indices, args.window_size)
+            return
+
         if args.val and not check_file_label_type(args.val, args.label_type):
             print(f"Error: Validation file does not match label type '{args.label_type}'")
             print(f"File: {args.val}")
