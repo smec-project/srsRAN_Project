@@ -523,6 +523,118 @@ def check_file_label_type(file_path, expected_label_type):
     base_name = os.path.basename(file_path)
     return base_name.endswith(f"_{expected_label_type}.npy")
 
+def evaluate_and_record_predictions(model, scaler, val_data, model_name, feature_indices, window_size=1):
+    """
+    Evaluate model and record predictions for each BSR
+    Returns:
+        dict: Dictionary mapping RNTI to list of predicted labels
+    """
+    bsr_predictions = {}  # Dict to store BSR predictions for each RNTI
+    
+    print(f"\nPer-RNTI Evaluation for {model_name}:")
+    
+    for rnti, events in val_data.items():
+        # Prepare data
+        X_val_rnti, y_val_rnti = prepare_training_data({rnti: events}, window_size, feature_indices)
+        if len(X_val_rnti) == 0:
+            continue
+            
+        # Scale features and get predictions
+        X_val_scaled = scaler.transform(X_val_rnti)
+        y_pred = model.predict(X_val_scaled)
+        
+        # Store predictions for this RNTI
+        bsr_predictions[rnti] = y_pred.tolist()
+        
+        # Calculate metrics
+        accuracy = np.mean(y_val_rnti == y_pred)
+        tn, fp, fn, tp = confusion_matrix(y_val_rnti, y_pred).ravel()
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        
+        print(f"\nRNTI {rnti}:")
+        print(f"  Windows: {len(y_val_rnti)}")
+        print(f"  Accuracy: {accuracy:.4f}")
+        print(f"  Precision: {precision:.4f}")
+        print(f"  Recall: {recall:.4f}")
+        print(f"  F1-score: {f1:.4f}")
+        print("  Confusion Matrix:")
+        print(f"    TN: {tn}, FP: {fp}")
+        print(f"    FN: {fn}, TP: {tp}")
+    
+    return bsr_predictions
+
+def print_events_with_predictions(full_events_path, predictions, window_size):
+    """
+    Print full events data with predictions
+    Args:
+        full_events_path: Path to full events data file
+        predictions: Dictionary mapping RNTI to list of predicted labels
+        window_size: Window size used for predictions
+    """
+    # Load full events data
+    full_events = np.load(full_events_path, allow_pickle=True).item()
+    
+    print("\nFull Events Data Analysis with Predictions:")
+    print(f"Number of RNTIs: {len(full_events)}")
+    
+    for rnti, events in full_events.items():
+        print(f"\nRNTI {rnti}")
+        total_events = len(events)
+        
+        # Count event types
+        sr_count = np.sum(events[:, 0] == 0)     # SR type is 0
+        bsr_count = np.sum(events[:, 0] == 1)    # BSR type is 1
+        prb_count = np.sum(events[:, 0] == 2)    # PRB type is 2
+        req_start_count = np.sum(events[:, 0] == 3)  # REQUEST_START is 3
+        req_end_count = np.sum(events[:, 0] == 4)    # REQUEST_END is 4
+        
+        # Count unique request sequences
+        unique_requests = len(np.unique(events[events[:, 5] > 0, 5]))
+        
+        print(f"Total events: {total_events}")
+        print(f"Event distribution:")
+        print(f"  SR: {sr_count}")
+        print(f"  BSR: {bsr_count}")
+        print(f"  PRB: {prb_count}")
+        print(f"  REQUEST_START: {req_start_count}")
+        print(f"  REQUEST_END: {req_end_count}")
+        print(f"Number of unique requests: {unique_requests}")
+        
+        print("\nAll events details:")
+        print("Type      | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) | ReqSeq | BSR_Label | Predicted")
+        
+        # Get predictions for this RNTI
+        rnti_predictions = predictions.get(rnti, [])
+        bsr_count = 0  # Count BSRs to handle window offset
+        pred_idx = 0
+        
+        for event in events:
+            event_type = {
+                0: "SR",
+                1: "BSR",
+                2: "PRB",
+                3: "REQ_START",
+                4: "REQ_END"
+            }.get(event[0], "UNKNOWN")
+            
+            req_seq = int(event[5])
+            req_seq_str = str(req_seq) if req_seq > 0 else "0"
+            bsr_label = str(int(event[6])) + ":bsr" if event[6] > 0 else "0"
+            
+            # Add prediction if it's a BSR event after window_size BSRs
+            pred_str = "0"
+            if event_type == "BSR":
+                if bsr_count >= window_size and pred_idx < len(rnti_predictions):
+                    pred_str = str(int(rnti_predictions[pred_idx])) + ":pred"
+                    pred_idx += 1
+                bsr_count += 1
+            
+            print(f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | "
+                  f"{event[4]:11.2f} | {req_seq_str:6} | {bsr_label:9} | {pred_str:9}")
+        print("-" * 90)
+
 def main():
     parser = argparse.ArgumentParser(description='Train and evaluate request prediction models')
     parser.add_argument('--train', nargs='*', help='Path to training data files (.npy)')
@@ -574,9 +686,15 @@ def main():
             scaler = joblib.load(scaler_path)
             val_data = np.load(args.val, allow_pickle=True).item()
             
-            # Evaluate model
-            print(f"\nEvaluating {args.model} on validation data...")
-            evaluate_per_rnti(model, scaler, val_data, args.model, feature_indices, args.window_size)
+            # Get predictions and print statistics
+            predictions = evaluate_and_record_predictions(model, scaler, val_data, args.model, 
+                                                       feature_indices, args.window_size)
+            
+            # Get full events file path
+            full_events_path = args.val.replace('_bsr_only.npy', '_full_events.npy')
+            if os.path.exists(full_events_path):
+                print_events_with_predictions(full_events_path, predictions, args.window_size)
+            
             return
 
         if args.val and not check_file_label_type(args.val, args.label_type):
@@ -648,6 +766,11 @@ def main():
             print("  2. Only --val (auto-train mode)")
             print("  3. Both --train and --val (manual mode)")
             return
+            
+        # Get full events file path
+        full_events_path = args.val.replace('_bsr_only.npy', '_full_events.npy')
+        if os.path.exists(full_events_path):
+            print_events_with_predictions(full_events_path, results[args.model]['predictions'], args.window_size)
             
     except Exception as e:
         print(f"Error: {str(e)}")
