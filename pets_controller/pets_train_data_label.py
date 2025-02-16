@@ -189,6 +189,7 @@ class TrainDataLabeler:
             is_new_request = 0
             quantized_events.append(self.quantize_event(event, is_new_request))
 
+        bsr_gap_threshold = 2
         # Process each request independently
         for start_idx, end_idx, seq_num in request_pairs:
             request_start_time = events[start_idx]['timestamp']
@@ -198,7 +199,7 @@ class TrainDataLabeler:
             for i in range(start_idx, end_idx+1):
                 if events[i]['type'] == 'BSR':
                     time_diff = (events[i]['timestamp'] - request_start_time) * 1000
-                    if time_diff > 2:
+                    if time_diff > bsr_gap_threshold:
                         first_bsr_idx = i
                         break
             
@@ -225,7 +226,7 @@ class TrainDataLabeler:
                     time_diff = (current_bsr['timestamp'] - request_start_time) * 1000  # convert to ms
                     
                     if last_bsr is not None:
-                        if current_bsr['value']['bytes'] > last_bsr['value']['bytes'] and time_diff > 2:
+                        if current_bsr['value']['bytes'] > last_bsr['value']['bytes'] and time_diff > bsr_gap_threshold:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -233,7 +234,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0 and time_diff > 2:
+                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0 and time_diff > bsr_gap_threshold:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -241,7 +242,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0 and time_diff > 2:
+                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0 and time_diff > bsr_gap_threshold:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -252,7 +253,7 @@ class TrainDataLabeler:
                         else:
                             prb_count = 0
 
-                    elif current_bsr['value']['bytes'] > 0 and time_diff > 2:
+                    elif current_bsr['value']['bytes'] > 0 and time_diff > bsr_gap_threshold:
                         quantized_events[i][5] = 1
                         if bsr_request_map.get(i) is None:
                             bsr_request_map[i] = [seq_num]
@@ -260,7 +261,7 @@ class TrainDataLabeler:
                             bsr_request_map[i].append(seq_num)
                         found_increase = True
                         break
-                    last_bsr = current_bsr
+                    last_bsr = current_bsr  
                 elif events[i]['type'] == 'PRB':
                     prb_count += events[i]['value']['prbs']
             
