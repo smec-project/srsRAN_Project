@@ -176,10 +176,11 @@ bool scheduler_metrics_sender::send_sr_metrics(const sr_metrics& metrics)
 
 std::string scheduler_metrics_sender::format_bsr_metrics(const bsr_metrics& metrics)
 {
-    return fmt::format("TYPE=BSR,UE_IDX={},RNTI={:#6x},BYTES={}\n",
+    return fmt::format("TYPE=BSR,UE_IDX={},RNTI={:#6x},BYTES={},SLOT={}\n",
                       metrics.ue_index,
                       (unsigned)metrics.crnti,
-                      metrics.nof_bytes);
+                      metrics.nof_bytes,
+                      metrics.slot_rx.to_uint());
 }
 
 bool scheduler_metrics_sender::send_bsr_metrics(const bsr_metrics& metrics)

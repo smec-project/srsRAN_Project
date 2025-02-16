@@ -37,6 +37,7 @@ struct mac_bsr_ce_info {
   du_ue_index_t   ue_index;
   rnti_t          rnti;
   bsr_format      bsr_fmt;
+  slot_point      slot_rx;
   /// \brief List of BSR reports decoded from the MAC CE BSR for different LCG IDs.
   lcg_bsr_report_list lcg_reports;
 };

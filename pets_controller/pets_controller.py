@@ -521,8 +521,18 @@ class TuttiController:
         rnti = values['RNTI'][-4:]  # Just take last 4 chars
         ue_idx = values['UE_IDX']
         bytes = int(values['BYTES'])
-        self.log_file.write(f"bsr received from RNTI=0x{rnti}, bytes={bytes} at {time.time()}\n")
+        slot = int(values['SLOT'])
+        
+        self.log_file.write(f"BSR received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at {time.time()}\n")
         self.log_file.flush()
+
+        if rnti not in self.current_metrics:
+            self.current_metrics[rnti] = {}
+        self.current_metrics[rnti].update({
+            'UE_IDX': ue_idx,
+            'BSR_BYTES': bytes,
+            'BSR_SLOT': slot
+        })
 
     def __del__(self):
         """Ensure sockets are closed when object is destroyed"""

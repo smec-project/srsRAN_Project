@@ -67,6 +67,7 @@ struct sr_metrics : public base_metrics {
 // BSR metrics
 struct bsr_metrics : public base_metrics {
     unsigned nof_bytes;  // Total buffer size in bytes
+    slot_point slot_rx;
 };
 
 /// \brief Class responsible for sending scheduler metrics over TCP connection.

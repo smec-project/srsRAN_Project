@@ -171,7 +171,8 @@ void srsran_scheduler_adapter::handle_ul_bsr_indication(const mac_bsr_ce_info& b
       metrics_type::BSR_IND,
       bsr.ue_index,
       bsr.rnti,
-      total_bytes
+      total_bytes,
+      bsr.slot_rx
   };
   scheduler_metrics_sender::instance().send_bsr_metrics(metrics);
 
