@@ -59,21 +59,28 @@ class TrainDataLabeler:
                         continue
 
                     if 'SR received' in line:
-                        rnti = line.split('RNTI=')[1].split(',')[0].replace('0x', '')
-                        self.add_event(rnti, timestamp, 'SR')
+                        parts = line.split('RNTI=')[1].split(',')
+                        rnti = parts[0].replace('0x', '')
+                        slot = int(parts[1].split('slot=')[1].split()[0])
+                        event = self.add_event(rnti, timestamp, 'SR')
+                        event['slot'] = slot
                         
                     elif 'bsr received' in line.lower():
                         parts = line.split('RNTI=')[1].split(',')
                         rnti = parts[0].replace('0x', '')
+                        slot = int(parts[1].split('slot=')[1].split()[0])
                         bytes_str = parts[2].split('bytes=')[1].split()[0]
                         bytes_val = int(bytes_str)
-                        self.add_event(rnti, timestamp, 'BSR', {'bytes': bytes_val})
+                        event = self.add_event(rnti, timestamp, 'BSR', {'bytes': bytes_val})
+                        event['slot'] = slot
                         
                     elif 'PRB received' in line:
-                        rnti = line.split('RNTI=')[1].split(',')[0].replace('0x', '')
-                        parts = line.split(',')
-                        prbs = int(parts[2].split('=')[1].split()[0])
-                        self.add_event(rnti, timestamp, 'PRB', {'prbs': prbs})
+                        parts = line.split('RNTI=')[1].split(',')
+                        rnti = parts[0].replace('0x', '')
+                        slot = int(parts[1].split('slot=')[1].split()[0])
+                        prbs = int(parts[2].split('prbs=')[1].split()[0])
+                        event = self.add_event(rnti, timestamp, 'PRB', {'prbs': prbs})
+                        event['slot'] = slot
                         
                 except Exception as e:
                     print(f"Error parsing line: {line.strip()}")
@@ -87,14 +94,20 @@ class TrainDataLabeler:
     def add_event(self, rnti, timestamp, event_type, value=None):
         """
         Add an event to the events dictionary
+        Returns:
+            dict: The added event data
         """
         if rnti not in self.events:
             self.events[rnti] = []
-        self.events[rnti].append({
+        
+        event_data = {
             'timestamp': timestamp,
             'type': event_type,
-            'value': value
-        })
+            'value': value if value else {},
+            'slot': None
+        }
+        self.events[rnti].append(event_data)
+        return event_data
 
     def quantize_event(self, event, is_new_request=0):
         """
