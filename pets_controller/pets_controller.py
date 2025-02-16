@@ -523,7 +523,7 @@ class TuttiController:
         bytes = int(values['BYTES'])
         slot = int(values['SLOT'])
         
-        self.log_file.write(f"BSR received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at {time.time()}\n")
+        self.log_file.write(f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at {time.time()}\n")
         self.log_file.flush()
 
         if rnti not in self.current_metrics:
