@@ -130,6 +130,83 @@ class TrainDataLabeler:
         
         return quantized
 
+    def normalize_slots(self, events):
+        """
+        Convert cyclic slots (0-20480) into a continuous increasing sequence
+        and make them relative to the first event
+        """
+        SLOT_MAX = 20480
+        current_cycle = 0
+        last_slot = None
+        
+        # First convert to continuous sequence
+        for event in events:
+            if event['slot'] is not None:
+                current_slot = event['slot']
+                
+                if last_slot is not None:
+                    # If current slot is much smaller than last slot, we've wrapped around
+                    if current_slot < last_slot - SLOT_MAX//2:
+                        current_cycle += 1
+                    # If current slot is much larger than last slot, we've gone backwards
+                    elif current_slot > last_slot + SLOT_MAX//2:
+                        current_cycle -= 1
+                
+                # Update the slot value with the cycle count
+                event['slot'] = current_slot + (current_cycle * SLOT_MAX)
+                last_slot = current_slot
+        
+        # Find first slot value
+        first_slot = None
+        for event in events:
+            if event['slot'] is not None:
+                first_slot = event['slot']
+                break
+        
+        # Make slots relative to first slot
+        if first_slot is not None:
+            for event in events:
+                if event['slot'] is not None:
+                    event['slot'] = event['slot'] - first_slot
+
+    def sort_events_by_slot(self, events):
+        """
+        Sort SR, PRB, BSR events by slot and merge with request events
+        """
+        # Separate events with and without slots
+        slot_events = []
+        request_events = []
+        
+        for event in events:
+            if event['slot'] is not None:
+                slot_events.append(event)
+            else:
+                request_events.append(event)
+        
+        # Sort events with slots
+        slot_events.sort(key=lambda x: (x['slot'], 
+                                      # When slots are equal, PRB comes before BSR
+                                      0 if x['type'] == 'PRB' else 1 if x['type'] == 'BSR' else -1))
+        
+        # Merge sorted events
+        sorted_events = []
+        slot_idx = 0
+        req_idx = 0
+        
+        while slot_idx < len(slot_events) and req_idx < len(request_events):
+            if slot_events[slot_idx]['timestamp'] <= request_events[req_idx]['timestamp']:
+                sorted_events.append(slot_events[slot_idx])
+                slot_idx += 1
+            else:
+                sorted_events.append(request_events[req_idx])
+                req_idx += 1
+        
+        # Add remaining events
+        sorted_events.extend(slot_events[slot_idx:])
+        sorted_events.extend(request_events[req_idx:])
+        
+        return sorted_events
+
     def analyze_ue_events(self, target_rnti):
         """
         Analyze and quantize all events for a specific RNTI
@@ -405,6 +482,11 @@ class TrainDataLabeler:
         Analyze events for all UEs and generate both filtered and full datasets
         """
         print(f"\nFound {len(self.active_rntis)} RNTIs with requests: {sorted(self.active_rntis)}")
+        
+        # Normalize slots and sort events for each RNTI
+        for rnti in self.active_rntis:
+            self.normalize_slots(self.events[rnti])
+            self.events[rnti] = self.sort_events_by_slot(self.events[rnti])
         
         # Create process pool
         num_cores = multiprocessing.cpu_count()
