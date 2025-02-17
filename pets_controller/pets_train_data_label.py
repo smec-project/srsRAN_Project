@@ -17,11 +17,21 @@ class TrainDataLabeler:
         'REQUEST_END': 4
     }
     
+    # BSR index to value mapping
+    BSR_VALUES = [
+        0,     10,    14,    20,    28,    38,    53,    74,     # 0-7
+        102,   142,   198,   276,   384,   535,   745,   1038,   # 8-15
+        1446,  2014,  2806,  3909,  5446,  7587,  10570, 14726,  # 16-23
+        20516, 28581, 39818, 55474, 77284, 107669,150000,300000  # 24-31
+    ]
+    
     def __init__(self):
         # Store events for each RNTI
         self.events = {}
         # Store all RNTIs that have requests
         self.active_rntis = set()
+        # Store request sizes for each RNTI
+        self.request_sizes = {}
         
     def parse_log_file(self, filename):
         """
@@ -33,6 +43,15 @@ class TrainDataLabeler:
             for line in f:
                 try:
                     # Skip lines without timestamp
+                        
+                    # Extract request size from UE registration
+                    if 'New UE registered' in line:
+                        parts = line.split(',')
+                        rnti = parts[0].split('RNTI:')[1].strip().replace('0x', '')
+                        size = int(parts[3].split('Size:')[1].split()[0])
+                        self.request_sizes[rnti] = size
+                        continue
+
                     if 'at ' not in line:
                         continue
                         
@@ -109,23 +128,28 @@ class TrainDataLabeler:
         self.events[rnti].append(event_data)
         return event_data
 
-    def quantize_event(self, event, is_new_request=0):
+    def quantize_event(self, event, is_new_request=0, base_time=0):
         """
         Quantize a single event into the required format with label
-        Returns: [type, bytes, prbs, rel_time, time_diff, is_new_request]
+        Returns: [type, bytes, prbs, timestamp, slot, is_new_request]
         """
         event_type = event['type']
         quantized = np.zeros(6, dtype=np.float32)
         
-        # Convert absolute timestamp to relative timestamp (milliseconds)
-        base_time = event.get('base_time', event['timestamp'])
-        rel_time = (event['timestamp'] - base_time) * 1000  # Convert to milliseconds
-        
+        # Set event type
         quantized[0] = self.EVENT_TYPES[event_type]
+        
+        # Set BSR bytes or PRB count
         quantized[1] = event['value']['bytes'] if event_type == 'BSR' else 0
         quantized[2] = event['value']['prbs'] if event_type == 'PRB' else 0
-        quantized[3] = rel_time  # Store relative time in milliseconds
-        quantized[4] = event.get('time_diff', 0)  # Already in milliseconds
+        
+        # Set timestamp
+        quantized[3] = (event['timestamp'] - base_time) * 1000
+        
+        # Set slot (use -1 for request events)
+        quantized[4] = event['slot'] if event['slot'] is not None else -1
+        
+        # Set request label
         quantized[5] = is_new_request
         
         return quantized
@@ -217,37 +241,12 @@ class TrainDataLabeler:
         if target_rnti not in self.events:
             print(f"No events found for RNTI {target_rnti}")
             return None, None
-
-        # Sort events by timestamp
-        events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
         
-        # Set base time for all events
-        base_time = events[0]['timestamp']
-        for event in events:
-            event['base_time'] = base_time
-        
-        # Convert timestamps to relative time (ms since first event)
-        for event in events:
-            event['rel_time'] = (event['timestamp'] - base_time) * 1000  # convert to ms
+        events = self.events[target_rnti]
             
         # Calculate time differences between consecutive SR/BSR/PRB events
         valid_event_types = {'SR', 'BSR', 'PRB'}
         valid_events = [e for e in events if e['type'] in valid_event_types]
-        
-        # Set time_diff for first valid event
-        if valid_events:
-            valid_events[0]['time_diff'] = 0
-            # Calculate time_diff for subsequent valid events
-            for i in range(1, len(valid_events)):
-                time_diff = (valid_events[i]['timestamp'] - valid_events[i-1]['timestamp']) * 1000
-                valid_events[i]['time_diff'] = time_diff
-        
-        # Create a mapping of timestamps to time_diffs for valid events
-        time_diff_map = {e['timestamp']: e['time_diff'] for e in valid_events}
-        
-        # Apply time_diffs to original events list
-        for event in events:
-            event['time_diff'] = time_diff_map.get(event['timestamp'], 0)
 
         # Count event types
         sr_count = sum(1 for e in events if e['type'] == 'SR')
@@ -275,23 +274,21 @@ class TrainDataLabeler:
         bsr_request_map = {}  # Map to store BSR index to request sequence number
 
         # Process each event
+        base_time = events[0]['timestamp']
         for event in events:
             is_new_request = 0
-            quantized_events.append(self.quantize_event(event, is_new_request))
+            quantized_events.append(self.quantize_event(event, is_new_request, base_time))
 
-        bsr_gap_threshold = 2
         # Process each request independently
         for start_idx, end_idx, seq_num in request_pairs:
             request_start_time = events[start_idx]['timestamp']
             
-            # First find the first unlabeled BSR in this request
+            # First find the first BSR in this request
             first_bsr_idx = None
             for i in range(start_idx, end_idx+1):
                 if events[i]['type'] == 'BSR':
-                    time_diff = (events[i]['timestamp'] - request_start_time) * 1000
-                    if time_diff > bsr_gap_threshold:
-                        first_bsr_idx = i
-                        break
+                    first_bsr_idx = i
+                    break
             
             if first_bsr_idx is None:
                 continue  # No unlabeled BSR in this request
@@ -305,7 +302,6 @@ class TrainDataLabeler:
                     break
                 if events[i]['type'] == 'PRB':
                     prb_count += events[i]['value']['prbs']
-            outside_last_bsr = last_bsr
             
             found_increase = False
             
@@ -313,10 +309,9 @@ class TrainDataLabeler:
             for i in range(start_idx, end_idx+1):
                 if events[i]['type'] == 'BSR':
                     current_bsr = events[i]
-                    time_diff = (current_bsr['timestamp'] - request_start_time) * 1000  # convert to ms
-                    
                     if last_bsr is not None:
-                        if current_bsr['value']['bytes'] > last_bsr['value']['bytes'] and time_diff > bsr_gap_threshold:
+
+                        if current_bsr['value']['bytes'] > last_bsr['value']['bytes']:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -324,7 +319,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0 and time_diff > bsr_gap_threshold:
+                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 20:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -332,7 +327,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and prb_count > 50 and current_bsr['value']['bytes'] != 0 and time_diff > bsr_gap_threshold:
+                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes']:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -343,7 +338,7 @@ class TrainDataLabeler:
                         else:
                             prb_count = 0
 
-                    elif current_bsr['value']['bytes'] > 0 and time_diff > bsr_gap_threshold:
+                    elif current_bsr['value']['bytes'] > 0:
                         quantized_events[i][5] = 1
                         if bsr_request_map.get(i) is None:
                             bsr_request_map[i] = [seq_num]
@@ -410,70 +405,49 @@ class TrainDataLabeler:
     def generate_full_events(self, target_rnti, bsr_request_map):
         """
         Generate a dataset containing all events including REQUEST_START/END
-        The 6th column will store request sequence number
-        The 7th column will store BSR labels (from bsr_only analysis)
+        Returns array with columns:
+            [0]: Event type (SR=0, BSR=1, PRB=2, REQ_START=3, REQ_END=4)
+            [1]: BSR bytes
+            [2]: PRBs
+            [3]: Relative time (ms)
+            [4]: Slot
+            [5]: Request sequence number
+            [6]: BSR label
         """
         if target_rnti not in self.events:
             print(f"No events found for RNTI {target_rnti}")
             return None
         
-        # Sort events by timestamp
-        events = sorted(self.events[target_rnti], key=lambda x: x['timestamp'])
-        
-        # Set base time for all events
+        events = self.events[target_rnti]
         base_time = events[0]['timestamp']
-        for event in events:
-            event['base_time'] = base_time
         
-        # Calculate time differences between all consecutive events
-        for i in range(1, len(events)):
-            time_diff = (events[i]['timestamp'] - events[i-1]['timestamp']) * 1000
-            events[i]['time_diff'] = time_diff
-        events[0]['time_diff'] = 0
-
-        
-        # Process events and store request sequence numbers
         quantized_events = []
-        seq_num_list = []
-        bsr_request_seq_set = set()
-
         for i, event in enumerate(events):
             # Initialize event data
             event_type = self.EVENT_TYPES[event['type']]
             bsr_bytes = event['value']['bytes'] if event['type'] == 'BSR' else 0
             prbs = event['value']['prbs'] if event['type'] == 'PRB' else 0
             rel_time = (event['timestamp'] - base_time) * 1000
-            time_diff = event['time_diff']
+            slot = event['slot'] if event['slot'] is not None else -1
             
             # Set request sequence number
-            if event['type'] in ['REQUEST_START', 'REQUEST_END']:
-                seq_num = event['value']['seq']
-                seq_num_list.append(seq_num)
-            else:
-                seq_num = 0
+            seq_num = event['value'].get('seq', 0) if event['type'] in ['REQUEST_START', 'REQUEST_END'] else 0
             
             # Set BSR label using index mapping
-            bsr_request_seq = bsr_request_map.get(i, [0])
-            # if len(bsr_request_seq) > 1:
-            #     bsr_request_seq_set.add(bsr_request_seq[-1])
-            #     print(f"bsr_request_seq: {bsr_request_seq}")
+            bsr_label = bsr_request_map.get(i, [0])[-1]
 
-            # Create quantized event with BSR label
+            # Create quantized event
             quantized_event = np.array([
-                event_type,      # Event type (SR=0, BSR=1, PRB=2, REQ_START=3, REQ_END=4)
+                event_type,      # Event type
                 bsr_bytes,       # BSR bytes
                 prbs,           # PRBs
                 rel_time,       # Relative time (ms)
-                time_diff,      # Time difference from previous event (ms)
+                slot,           # Slot
                 seq_num,        # Request sequence number
-                bsr_request_seq[-1] # BSR label (from bsr_only analysis)
+                bsr_label       # BSR label
             ], dtype=np.float32)
             
             quantized_events.append(quantized_event)
-
-        # for seq_num in seq_num_list:
-        #     if seq_num not in bsr_request_seq_set:
-        #         print(f"seq_num not in bsr_request_seq_set: {seq_num}:bsr")
         
         return np.array(quantized_events)
 
@@ -535,11 +509,11 @@ def print_numpy_data_info(label_type, data):
         print(f"Labeled events: {labeled_count}")
         
         print("\nAll events details:")
-        print("Type | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) | Label")
+        print("Type | Timestamp(ms) | BSR bytes | PRBs | Slot | Label")
         for event in ue_data:
             event_type = "SR" if event[0] == 0 else "BSR" if event[0] == 1 else "PRB"
             label = "1" if event[5] == 1 else "0"
-            print(f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:11.2f} | {label:5}")
+            print(f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:4.0f} | {label:5}")
         print("-" * 70)
 
 def print_full_events_info(data):
@@ -576,7 +550,7 @@ def print_full_events_info(data):
         print(f"Number of unique requests: {unique_requests}")
         
         print("\nAll events details:")
-        print("Type      | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) | ReqSeq | BSR_Label")
+        print("Type      | Timestamp(ms) | BSR bytes | PRBs | Slot      | ReqSeq | BSR_Label")
         for event in ue_data:
             event_type = {
                 0: "SR",
@@ -586,12 +560,13 @@ def print_full_events_info(data):
                 4: "REQ_END"
             }.get(event[0], "UNKNOWN")
             
+            slot_str = str(int(event[4])) if event[4] >= 0 else "N/A"
             req_seq = int(event[5])
             req_seq_str = str(req_seq) if req_seq > 0 else "0"
             bsr_label = str(int(event[6])) + ":bsr" if event[6] > 0 else "0"
             
-            print(f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:11.2f} | {req_seq_str:6} | {bsr_label:9}")
-        print("-" * 80)
+            print(f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {slot_str:9} | {req_seq_str:6} | {bsr_label:9}")
+        print("-" * 90)
 
 def process_single_rnti(rnti, events_dict=None):
     """
@@ -643,8 +618,8 @@ def main():
     np.save(f"{args.output}_full_events.npy", labeled_full_data)  # Save full events data
     
     # Print information about saved data
-    # print_numpy_data_info("BSR-only", labeled_data)
-    # print_full_events_info(labeled_full_data)  # Print full events info
+    print_numpy_data_info("BSR-only", labeled_data)
+    print_full_events_info(labeled_full_data)  # Print full events info
     
     print(f"\nLabeled data saved to directory: labeled_data/{base_name}/")
     print(f"Files:")
