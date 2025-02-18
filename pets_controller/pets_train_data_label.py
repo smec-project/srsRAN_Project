@@ -304,8 +304,8 @@ class TrainDataLabeler:
                     last_bsr_value_higher_bound = last_bsr['value']['bytes']
                     current_bsr_higher_bound_w_request = last_bsr_value_higher_bound + self.request_sizes[target_rnti] - prb_count * 50
                     normalized_current_bsr_higher_bound = self.get_next_bsr_value(current_bsr_higher_bound_w_request)
-
-                    print(seq_num, last_bsr['value']['bytes'], current_bsr['value']['bytes'], normalized_current_bsr_lower_bound, normalized_current_bsr_higher_bound)
+                    if target_rnti == '4601':
+                        print(seq_num, last_bsr['value']['bytes'], current_bsr['value']['bytes'], normalized_current_bsr_lower_bound, normalized_current_bsr_higher_bound)
                     if last_bsr is not None:
                         if current_bsr['value']['bytes'] > last_bsr['value']['bytes']:
                             quantized_events[i][5] = 1
@@ -315,7 +315,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and current_bsr['value']['bytes'] >= normalized_current_bsr_lower_bound and current_bsr['value']['bytes'] <= normalized_current_bsr_higher_bound:
+                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and current_bsr['value']['bytes'] > normalized_current_bsr_lower_bound and current_bsr['value']['bytes'] < normalized_current_bsr_higher_bound:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -323,7 +323,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and current_bsr['value']['bytes'] >= normalized_current_bsr_lower_bound and current_bsr['value']['bytes'] <= normalized_current_bsr_higher_bound:
+                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and current_bsr['value']['bytes'] > normalized_current_bsr_lower_bound and current_bsr['value']['bytes'] < normalized_current_bsr_higher_bound:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -489,7 +489,7 @@ class TrainDataLabeler:
         for i in range(len(self.BSR_VALUES)-1, -1, -1):
             if bsr_bytes > self.BSR_VALUES[i]:
                 return self.BSR_VALUES[i]
-        return 0
+        return -1
 
     def get_next_bsr_value(self, bsr_bytes):
         """
