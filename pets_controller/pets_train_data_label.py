@@ -281,22 +281,10 @@ class TrainDataLabeler:
 
         # Process each request independently
         for start_idx, end_idx, seq_num in request_pairs:
-            request_start_time = events[start_idx]['timestamp']
-            
-            # First find the first BSR in this request
-            first_bsr_idx = None
-            for i in range(start_idx, end_idx+1):
-                if events[i]['type'] == 'BSR':
-                    first_bsr_idx = i
-                    break
-            
-            if first_bsr_idx is None:
-                continue  # No unlabeled BSR in this request
-                
             # Now find the last BSR before the first unlabeled BSR
             last_bsr = None
             prb_count = 0
-            for i in range(first_bsr_idx-1, -1, -1):
+            for i in range(start_idx-1, -1, -1):
                 if events[i]['type'] == 'BSR':
                     last_bsr = events[i]
                     break
@@ -309,8 +297,16 @@ class TrainDataLabeler:
             for i in range(start_idx, end_idx+1):
                 if events[i]['type'] == 'BSR':
                     current_bsr = events[i]
-                    if last_bsr is not None:
+                    last_bsr_value_lower_bound = self.get_prev_bsr_value(last_bsr['value']['bytes']) + 1
+                    current_bsr_lower_bound_w_request = last_bsr_value_lower_bound + self.request_sizes[target_rnti] - prb_count * 90
+                    normalized_current_bsr_lower_bound = self.get_prev_bsr_value(current_bsr_lower_bound_w_request)
 
+                    last_bsr_value_higher_bound = last_bsr['value']['bytes']
+                    current_bsr_higher_bound_w_request = last_bsr_value_higher_bound + self.request_sizes[target_rnti] - prb_count * 50
+                    normalized_current_bsr_higher_bound = self.get_next_bsr_value(current_bsr_higher_bound_w_request)
+
+                    print(seq_num, last_bsr['value']['bytes'], current_bsr['value']['bytes'], normalized_current_bsr_lower_bound, normalized_current_bsr_higher_bound)
+                    if last_bsr is not None:
                         if current_bsr['value']['bytes'] > last_bsr['value']['bytes']:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
@@ -319,7 +315,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and prb_count > 20:
+                        elif current_bsr['value']['bytes'] == last_bsr['value']['bytes'] and current_bsr['value']['bytes'] >= normalized_current_bsr_lower_bound and current_bsr['value']['bytes'] <= normalized_current_bsr_higher_bound:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -327,7 +323,7 @@ class TrainDataLabeler:
                                 bsr_request_map[i].append(seq_num)
                             found_increase = True
                             break
-                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes']:
+                        elif current_bsr['value']['bytes'] < last_bsr['value']['bytes'] and current_bsr['value']['bytes'] >= normalized_current_bsr_lower_bound and current_bsr['value']['bytes'] <= normalized_current_bsr_higher_bound:
                             quantized_events[i][5] = 1
                             if bsr_request_map.get(i) is None:
                                 bsr_request_map[i] = [seq_num]
@@ -350,13 +346,9 @@ class TrainDataLabeler:
                 elif events[i]['type'] == 'PRB':
                     prb_count += events[i]['value']['prbs']
             
-            # If no increase found, mark the first unlabeled BSR
+            # Only print if request was not labeled
             if not found_increase:
-                quantized_events[first_bsr_idx][5] = 1
-                if bsr_request_map.get(first_bsr_idx) is None:
-                    bsr_request_map[first_bsr_idx] = [seq_num]
-                else:
-                    bsr_request_map[first_bsr_idx].append(seq_num)
+                print(f"{seq_num:6d}")
 
         quantized_events = np.array(quantized_events)
         
@@ -467,7 +459,7 @@ class TrainDataLabeler:
         pool = multiprocessing.Pool(processes=num_cores)
         
         # Prepare arguments for parallel processing
-        process_func = partial(process_single_rnti, events_dict=self.events)
+        process_func = partial(process_single_rnti, events_dict=self.events, request_sizes=self.request_sizes)
         
         # Process RNTIs in parallel
         results = pool.map(process_func, sorted(self.active_rntis))
@@ -485,6 +477,32 @@ class TrainDataLabeler:
                 all_ue_full_data[rnti] = ue_full_data
         
         return all_ue_data, all_ue_full_data
+
+    def get_prev_bsr_value(self, bsr_bytes):
+        """
+        Get the previous BSR value
+        Args:
+            bsr_bytes: Current BSR bytes
+        Returns:
+            int: Previous BSR value in the table
+        """
+        for i in range(len(self.BSR_VALUES)-1, -1, -1):
+            if bsr_bytes > self.BSR_VALUES[i]:
+                return self.BSR_VALUES[i]
+        return 0
+
+    def get_next_bsr_value(self, bsr_bytes):
+        """
+        Get the next BSR value
+        Args:
+            bsr_bytes: Current BSR bytes
+        Returns:
+            int: Next BSR value in the table
+        """
+        for i in range(len(self.BSR_VALUES)):
+            if bsr_bytes <= self.BSR_VALUES[i]:
+                return self.BSR_VALUES[i]
+        return self.BSR_VALUES[-1]
 
 def print_numpy_data_info(label_type, data):
     """
@@ -568,13 +586,14 @@ def print_full_events_info(data):
             print(f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {slot_str:9} | {req_seq_str:6} | {bsr_label:9}")
         print("-" * 90)
 
-def process_single_rnti(rnti, events_dict=None):
+def process_single_rnti(rnti, events_dict=None, request_sizes=None):
     """
     Process a single RNTI's data
     """
     labeler = TrainDataLabeler()
     labeler.events = {rnti: events_dict[rnti]}
     labeler.active_rntis = {rnti}
+    labeler.request_sizes = request_sizes
     
     # Run all analyses
     ue_data, bsr_request_map = labeler.analyze_ue_events(rnti)
