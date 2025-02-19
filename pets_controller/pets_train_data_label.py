@@ -324,8 +324,6 @@ class TrainDataLabeler:
         # Process each request independently
         for start_idx, end_idx, seq_num in request_pairs:
             if request_labels[seq_num-1]:
-                if target_rnti == '4602':
-                    print(f"Request {seq_num} already labeled, flushing")
                 continue
             # Find all BSR pairs in this request
             bsr_indices = []
@@ -400,15 +398,12 @@ class TrainDataLabeler:
             for bsr_pair in reversed(bsr_pairs_before_next_request):
                 if bsr_pair[0]['value']['bytes'] >= bsr_pair[1]['value']['bytes']:
                     last_bsr_lower_bound = self.get_prev_bsr_value(bsr_pair[0]['value']['bytes'])
-                    curr_bsr_lower_bound_w_request = last_bsr_lower_bound + self.request_sizes[target_rnti] - bsr_pair[2] * 85
+                    curr_bsr_lower_bound_w_request = last_bsr_lower_bound + self.request_sizes[target_rnti] - bsr_pair[2] * 100
                     format_bsr_low_bound = self.get_prev_bsr_value(curr_bsr_lower_bound_w_request)
                     last_bsr_higher_bound = bsr_pair[0]['value']['bytes']
                     curr_bsr_higher_bound_w_request = last_bsr_higher_bound + self.request_sizes[target_rnti] - bsr_pair[2] * 50
                     format_bsr_high_bound = self.get_next_bsr_value(curr_bsr_higher_bound_w_request)
-                    if seq_num == 30 and target_rnti == '4601':
-                        print(last_bsr_lower_bound, curr_bsr_lower_bound_w_request, format_bsr_low_bound)
-                        print(f"bsr_pair: {bsr_pair[0]['value']['bytes']} {bsr_pair[1]['value']['bytes']}, format_bsr_low_bound: {format_bsr_low_bound}, format_bsr_high_bound: {format_bsr_high_bound}")
-                    if bsr_pair[1]['value']['bytes'] > format_bsr_low_bound and bsr_pair[1]['value']['bytes'] < format_bsr_high_bound:
+                    if bsr_pair[1]['value']['bytes'] >= format_bsr_low_bound and bsr_pair[1]['value']['bytes'] < format_bsr_high_bound:
                         is_request_labeled = 1
                         quantized_events[bsr_pair[3]][5] = 1
                         request_labels[seq_num-1] = 1
@@ -427,13 +422,6 @@ class TrainDataLabeler:
         quantized_events = quantized_events[mask]
         labeled_count = sum(1 for e in quantized_events if e[5] == 1)
         print(f"Labeled BSRs: {labeled_count}")
-
-        if target_rnti == '4602':
-            count = 0
-            for status in request_labels:
-                if status == 0:
-                    print(f"request {count+1} not labeled")
-                count += 1
         
         return quantized_events, bsr_request_map
 
