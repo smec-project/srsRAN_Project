@@ -425,40 +425,6 @@ class TrainDataLabeler:
         
         return quantized_events, bsr_request_map
 
-    def print_request_timing(self, rnti):
-        if rnti not in self.events:
-            return
-        
-        events = sorted(self.events[rnti], key=lambda x: x['timestamp'])
-        base_time = events[0]['timestamp']
-
-        request_starts = [(i, e) for i, e in enumerate(events) 
-                         if e['type'] == 'REQUEST_START']
-        
-        print(f"\nRequest timing analysis for RNTI {rnti}:")
-        print("Format: ReqSeq | ReqStart(ms) | LabeledBSR(ms) | TimeDiff(ms)")
-        
-        for start_idx, start_event in request_starts:
-            seq_num = start_event['value']['seq']
-            start_time_ms = (start_event['timestamp'] - base_time) * 1000
-            
-            labeled_bsr = None
-            for i in range(start_idx, len(events)):
-                if (events[i]['type'] == 'REQUEST_END' and 
-                    events[i]['value']['seq'] == seq_num):
-                    break
-                if events[i]['type'] == 'BSR':
-                    event_idx = events.index(events[i])
-                    if event_idx < len(self.events[rnti]):
-                        labeled_bsr = events[i]
-                        labeled_time_ms = (labeled_bsr['timestamp'] - base_time) * 1000
-                        time_diff = labeled_time_ms - start_time_ms
-                        print(f"{seq_num:6d} | {start_time_ms:11.2f} | {labeled_time_ms:12.2f} | {time_diff:11.2f}")
-                        break
-            
-            if labeled_bsr is None:
-                print(f"{seq_num:6d} | {start_time_ms:11.2f} | {'N/A':>12} | {'N/A':>11}")
-
     def generate_full_events(self, target_rnti, bsr_request_map):
         """
         Generate a dataset containing all events including REQUEST_START/END

@@ -11,14 +11,21 @@ from sklearn.preprocessing import StandardScaler
 import glob
 import random
 
-def extract_window_features(events, window_bsr_indices, historical_bsr_avg, window_size=1):
+def extract_window_features(events, window_bsr_indices, window_size=1):
     """
-    Extract features for a window between BSRs
+    Extract features for a window between BSRs using slot-based timing
+    Events array format:
+    [0]: Event type (SR=0, BSR=1, PRB=2)
+    [1]: BSR bytes
+    [2]: PRBs
+    [3]: Timestamps
+    [4]: Slots
+    [5]: Label
     """
     all_features = []
     
-    # Get the last BSR's time as the search end time
-    final_bsr_time = events[window_bsr_indices[-1]][3]
+    # Get the last BSR's slot as the search end slot
+    final_bsr_slot = events[window_bsr_indices[-1]][4]
     
     # Process each BSR interval in the window
     for i in range(window_size):
@@ -28,21 +35,21 @@ def extract_window_features(events, window_bsr_indices, historical_bsr_avg, wind
         start_bsr = events[current_start_idx]
         end_bsr = events[current_end_idx]
         
-        # Find first PRB after start_bsr but before final_bsr
-        first_prb_time = final_bsr_time  # Default to final BSR time if no PRB found
+        # Find first PRB after start_bsr but before final_bsr using slots
+        first_prb_slot = final_bsr_slot  # Default to final BSR slot if no PRB found
         search_idx = current_start_idx + 1
         while search_idx < len(events):
             if events[search_idx][0] == 2:  # PRB event
-                first_prb_time = events[search_idx][3]
+                first_prb_slot = events[search_idx][4]
                 break
-            if events[search_idx][3] > final_bsr_time:  # Stop if we reach final BSR time
+            if events[search_idx][4] > final_bsr_slot:  # Stop if we reach final BSR slot
                 break
             search_idx += 1
         
-        # Calculate time until first PRB
-        time_until_prb = first_prb_time - start_bsr[3]
+        # Calculate slot difference until first PRB
+        slots_until_prb = first_prb_slot - start_bsr[4]
         
-        # Calculate other features as before
+        # Calculate other features
         bsr_diff = end_bsr[1] - start_bsr[1]
         end_bsr_value = end_bsr[1]
         
@@ -57,22 +64,28 @@ def extract_window_features(events, window_bsr_indices, historical_bsr_avg, wind
             elif event[0] == 0:  # SR event
                 sr_count += 1
         
-        window_duration = end_bsr[3] - start_bsr[3]
-        bsr_per_prb = bsr_diff / (total_prbs + 1e-6)
-        bsr_update_rate = 1000.0 / (window_duration + 1e-6)
-        sr_rate = sr_count * 1000.0 / (window_duration + 1e-6)
+        # Calculate window duration in slots
+        window_slots = end_bsr[4] - start_bsr[4]
+        
+        # Calculate BSR per PRB
+        bsr_per_prb = bsr_diff / (total_prbs + 1e-6)  # Add small epsilon to avoid division by zero
+        # Calculate rates using slots (multiply by 1000 to convert to per-millisecond rate)
+        # Assuming each slot is 0.5ms
+        window_duration_ms = window_slots * 0.5
+        bsr_update_rate = 1000.0 / (window_duration_ms + 1e-6)
+        sr_rate = sr_count * 1000.0 / (window_duration_ms + 1e-6)
         
         # Features for this interval
         interval_features = np.array([
-            bsr_diff,         # Difference between BSRs
-            total_prbs,       # Total PRBs allocated
-            sr_count,         # Number of SR events
-            end_bsr_value,    # Value of the end BSR
-            bsr_per_prb,      # BSR difference normalized by PRBs
-            window_duration,  # Time duration
-            bsr_update_rate,  # Rate of BSR updates
-            sr_rate,         # Rate of SR events
-            time_until_prb,  # Time until first PRB after BSR
+            bsr_diff,           # Difference between BSRs
+            total_prbs,         # Total PRBs allocated
+            sr_count,           # Number of SR events
+            end_bsr_value,      # Value of the end BSR
+            bsr_per_prb,        # BSR difference normalized by PRBs
+            window_slots,       # Time duration in slots
+            bsr_update_rate,    # Rate of BSR updates
+            sr_rate,            # Rate of SR events
+            slots_until_prb,    # Slots until first PRB after BSR
         ])
         
         all_features.append(interval_features)
@@ -96,13 +109,8 @@ def prepare_training_data(labeled_data, window_size=1, feature_indices=None):
         for i in range(len(bsr_indices) - window_size):
             window_bsr_indices = bsr_indices[i:i + window_size + 1]
             
-            historical_end = i
-            historical_start = max(0, historical_end - 10)
-            historical_bsrs = [events[bsr_indices[j]][1] for j in range(historical_start, historical_end)]
-            historical_bsr_avg = np.mean(historical_bsrs) if historical_bsrs else events[window_bsr_indices[-1]][1]
-            
             # Extract all features for the window
-            window_features = extract_window_features(events, window_bsr_indices, historical_bsr_avg, window_size)
+            window_features = extract_window_features(events, window_bsr_indices, window_size)
             
             # Reshape features to (window_size, 9) and select specified features for each interval
             window_features = window_features.reshape(window_size, 9)
@@ -635,6 +643,38 @@ def print_events_with_predictions(full_events_path, predictions, window_size):
                   f"{event[4]:11.2f} | {req_seq_str:6} | {bsr_label:9} | {pred_str:9}")
         print("-" * 90)
 
+def print_mismatched_predictions(full_events_path, predictions, window_size):
+    """
+    Print BSRs where predictions don't match the labels
+    """
+    # Load full events data
+    full_events = np.load(full_events_path, allow_pickle=True).item()
+    
+    print("\nMismatched Predictions:")
+    print("RNTI | Timestamp | BSR Label | Prediction")
+    print("-" * 45)
+    
+    for rnti, events in full_events.items():
+        rnti_predictions = predictions.get(rnti, [])
+        bsr_count = 0
+        pred_idx = 0
+        
+        for event in events:
+            if event[0] == 1:  # BSR event
+                if bsr_count >= window_size and pred_idx < len(rnti_predictions):
+                    # Convert BSR label to binary (0 or 1)
+                    true_label = 1 if event[6] > 0 else 0
+                    pred_label = int(rnti_predictions[pred_idx])
+                    
+                    # Check if prediction doesn't match label
+                    if true_label != pred_label:
+                        print(f"{rnti:4} | {event[3]:9.2f} | {true_label:9d} | {pred_label:10d}")
+                    
+                    pred_idx += 1
+                bsr_count += 1
+    
+    print("-" * 45)
+
 def main():
     parser = argparse.ArgumentParser(description='Train and evaluate request prediction models')
     parser.add_argument('--train', nargs='*', help='Path to training data files (.npy)')
@@ -693,6 +733,7 @@ def main():
             # Get full events file path
             full_events_path = args.val.replace('_bsr_only.npy', '_full_events.npy')
             if os.path.exists(full_events_path):
+                print_mismatched_predictions(full_events_path, predictions, args.window_size)
                 print_events_with_predictions(full_events_path, predictions, args.window_size)
             
             return
@@ -770,6 +811,7 @@ def main():
         # Get full events file path
         full_events_path = args.val.replace('_bsr_only.npy', '_full_events.npy')
         if os.path.exists(full_events_path):
+            print_mismatched_predictions(full_events_path, results[args.model]['predictions'], args.window_size)
             print_events_with_predictions(full_events_path, results[args.model]['predictions'], args.window_size)
             
     except Exception as e:
