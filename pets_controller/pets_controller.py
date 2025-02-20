@@ -5,6 +5,7 @@ import time
 import math
 from typing import Dict, Optional
 import argparse
+import numpy as np
 
 class PetsController:
     def __init__(
@@ -15,6 +16,7 @@ class PetsController:
         ran_control_ip: str = "127.0.0.1",
         ran_control_port: int = 5555,  # Port to send priority updates
         enable_logging: bool = False,  # Whether to enable logging
+        window_size: int = 5,  # Size of the window for analysis
     ):
         # Application server setup
         self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -55,9 +57,25 @@ class PetsController:
         self.ue_idx_to_rnti = {}  # UE_IDX -> RNTI
         self.rnti_to_ue_idx = {}  # RNTI -> UE_IDX
         
+        # Window size for analysis
+        self.window_size = window_size
+        
         # Logging setup
         self.enable_logging = enable_logging
         self.log_file = open('controller.txt', 'w') if enable_logging else None
+        
+        # Event storage for each RNTI (only store window events)
+        self.window_events: Dict[str, list] = {}  # RNTI -> list of events in window
+        self.ue_first_slots: Dict[str, int] = {}  # RNTI -> first slot number
+        self.ue_slot_cycles: Dict[str, int] = {}  # RNTI -> current slot cycle
+        self.ue_base_times: Dict[str, float] = {}  # RNTI -> base timestamp
+        
+        # Event type mapping
+        self.EVENT_TYPES = {
+            'SR': 0,
+            'BSR': 1,
+            'PRB': 2
+        }
 
     def start(self):
         """Start the controller and all its connections"""
@@ -261,49 +279,128 @@ class PetsController:
         """Initialize priority for a new UE"""
         self.ue_priorities[rnti] = 0.0
 
-    def _handle_prb_metrics(self, values):
-        """Handle PRB allocation metrics"""
-        # Keep RNTI as string
-        rnti = values['RNTI'][-4:]  # Just take last 4 chars
-        ue_idx = values['UE_IDX']
-        slot = int(values['SLOT'])
-        prbs = int(values['PRBs'])
+    def normalize_slot(self, rnti: str, slot: int) -> int:
+        """
+        Convert cyclic slots (0-20480) into a continuous increasing sequence
+        relative to the first ever event's slot
+        """
+        SLOT_MAX = 20480
         
-        # Update UE_IDX <-> RNTI mapping
-        self.ue_idx_to_rnti[ue_idx] = rnti
-        self.rnti_to_ue_idx[rnti] = ue_idx
+        if rnti not in self.ue_first_slots:
+            self.ue_first_slots[rnti] = slot
+            self.ue_slot_cycles[rnti] = 0
+            return 0
+            
+        # Check if we've wrapped around relative to the first slot
+        current_cycle = self.ue_slot_cycles[rnti]
+        base_slot = self.ue_first_slots[rnti]
         
-        # Store basic metrics
-        self.current_metrics[rnti] = {
-            'UE_IDX': ue_idx,
-            'PRBs': prbs,
-            'SLOT': slot
-        }
+        # Convert current slot to absolute position relative to base slot
+        if slot < base_slot - SLOT_MAX//2:
+            current_cycle += 1
+        elif slot > base_slot + SLOT_MAX//2:
+            current_cycle -= 1
+            
+        self.ue_slot_cycles[rnti] = current_cycle
+        absolute_slot = slot + (current_cycle * SLOT_MAX)
         
-        self.log(f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at {time.time()}")
+        return absolute_slot - base_slot
+
+    def add_event(self, rnti: str, event_type: str, timestamp: float, slot: int, **values):
+        """
+        Add an event to the window and update if necessary
+        Event format: [type, bytes, prbs, timestamp, slot, label]
+        """
+        if rnti not in self.window_events:
+            self.window_events[rnti] = []
+            self.ue_base_times[rnti] = timestamp
+            
+        # Normalize slot
+        normalized_slot = self.normalize_slot(rnti, slot)
+        
+        # Create event array
+        event = np.zeros(6, dtype=np.float32)
+        event[0] = self.EVENT_TYPES[event_type]  # Event type
+        event[1] = values.get('bytes', 0)  # BSR bytes
+        event[2] = values.get('prbs', 0)   # PRBs
+        event[3] = timestamp - self.ue_base_times[rnti]  # Relative timestamp from first event
+        event[4] = normalized_slot  # Normalized slot from first event
+        event[5] = 0  # Label (not used in controller)
+        
+        # Insert event in sorted position based on slot
+        insert_idx = len(self.window_events[rnti])
+        for i, e in enumerate(self.window_events[rnti]):
+            if (e[4] > normalized_slot or 
+                (e[4] == normalized_slot and event[0] == self.EVENT_TYPES['PRB'] and e[0] == self.EVENT_TYPES['BSR'])):
+                insert_idx = i
+                break
+        self.window_events[rnti].insert(insert_idx, event)
+        
+        # Update window if it's a BSR event
+        if event_type == 'BSR':
+            self.update_window(rnti)
+
+    def print_window_data(self, rnti: str):
+        """
+        Print all events in the current window for a specific RNTI
+        """
+        if not self.window_events.get(rnti):
+            return
+            
+        print(f"\nWindow data for RNTI {rnti}:")
+        print("Type | Timestamp(ms) | BSR bytes | PRBs | Slot | Label")
+        print("-" * 60)
+        
+        event_type_names = {v: k for k, v in self.EVENT_TYPES.items()}
+        
+        for event in self.window_events[rnti]:
+            event_type = event_type_names[int(event[0])]
+            timestamp_ms = event[3] * 1000  # Convert to milliseconds
+            bsr_bytes = event[1]
+            prbs = event[2]
+            slot = event[4]
+            label = event[5]
+            
+            print(f"{event_type:4} | {timestamp_ms:11.2f} | {bsr_bytes:9.0f} | {prbs:4.0f} | {slot:4.0f} | {label:5.0f}")
+        
+        print("-" * 60)
+
+    def update_window(self, rnti: str):
+        """
+        Update the sliding window when a new BSR event arrives
+        Only keep events between the last window_size+1 BSRs
+        """
+        # Find all BSR indices in current events
+        bsr_indices = [i for i, e in enumerate(self.window_events[rnti]) 
+                      if e[0] == self.EVENT_TYPES['BSR']]
+        
+        if len(bsr_indices) > self.window_size:
+            # Window full, remove events before the window
+            start_idx = bsr_indices[-(self.window_size + 1)]
+            self.window_events[rnti] = self.window_events[rnti][start_idx:]
 
     def _handle_sr_metrics(self, values):
         """Handle SR indication metrics"""
-        rnti = values['RNTI'][-4:]  # Just take last 4 chars
+        rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
+        self.add_event(rnti, 'SR', time.time(), slot)
         self.log(f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}")
 
     def _handle_bsr_metrics(self, values):
         """Handle BSR metrics"""
-        rnti = values['RNTI'][-4:]  # Just take last 4 chars
-        ue_idx = values['UE_IDX']
-        bytes = int(values['BYTES'])
+        rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
-        
-        self.log(f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at {time.time()}")
+        bytes_val = int(values['BYTES'])
+        self.add_event(rnti, 'BSR', time.time(), slot, bytes=bytes_val)
+        self.log(f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes_val} at {time.time()}")
 
-        if rnti not in self.current_metrics:
-            self.current_metrics[rnti] = {}
-        self.current_metrics[rnti].update({
-            'UE_IDX': ue_idx,
-            'BSR_BYTES': bytes,
-            'BSR_SLOT': slot
-        })
+    def _handle_prb_metrics(self, values):
+        """Handle PRB allocation metrics"""
+        rnti = values['RNTI'][-4:]
+        slot = int(values['SLOT'])
+        prbs = int(values['PRBs'])
+        self.add_event(rnti, 'PRB', time.time(), slot, prbs=prbs)
+        self.log(f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at {time.time()}")
 
     def log(self, message: str):
         """Helper method for logging"""
@@ -315,9 +412,11 @@ def main():
     parser = argparse.ArgumentParser(description='PETS Controller')
     parser.add_argument('--log', action='store_true', default=False,
                       help='Enable logging to file (default: False)')
+    parser.add_argument('--window-size', type=int, default=5,
+                      help='Size of the window for analysis (default: 5)')
     args = parser.parse_args()
     
-    controller = PetsController(enable_logging=args.log)
+    controller = PetsController(enable_logging=args.log, window_size=args.window_size)
     if controller.start():
         try:
             while True:
