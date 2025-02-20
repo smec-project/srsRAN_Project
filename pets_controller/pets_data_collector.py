@@ -69,8 +69,8 @@ class TuttiController:
         self.log_file = open('controller.txt', 'w')
 
         # Then start priority update thread
-        self.priority_thread = threading.Thread(target=self._update_priorities)
-        self.priority_thread.start()
+        # self.priority_thread = threading.Thread(target=self._update_priorities)
+        # self.priority_thread.start()
 
         # Add mapping between UE_IDX and RNTI
         self.ue_idx_to_rnti = {}  # UE_IDX -> RNTI
