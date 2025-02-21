@@ -17,6 +17,8 @@ class PetsController:
         ran_control_port: int = 5555,  # Port to send priority updates
         enable_logging: bool = False,  # Whether to enable logging
         window_size: int = 5,  # Size of the window for analysis
+        model_path: str = None,  # Path to the trained model
+        scaler_path: str = None,  # Path to the scaler
     ):
         # Application server setup
         self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -64,10 +66,11 @@ class PetsController:
         self.enable_logging = enable_logging
         self.log_file = open('controller.txt', 'w') if enable_logging else None
         
-        # Event storage for each RNTI (only store window events)
+        # Store events for each RNTI
         self.window_events: Dict[str, list] = {}  # RNTI -> list of events in window
         self.ue_first_slots: Dict[str, int] = {}  # RNTI -> first slot number
-        self.ue_slot_cycles: Dict[str, int] = {}  # RNTI -> current slot cycle
+        self.ue_slot_cycles_prb: Dict[str, int] = {}  # RNTI -> current PRB slot cycle
+        self.ue_slot_cycles_ctrl: Dict[str, int] = {}  # RNTI -> current SR/BSR slot cycle
         self.ue_base_times: Dict[str, float] = {}  # RNTI -> base timestamp
         
         # Event type mapping
@@ -76,6 +79,22 @@ class PetsController:
             'BSR': 1,
             'PRB': 2
         }
+        
+        # Load model and scaler if paths are provided
+        self.model = None
+        self.scaler = None
+        if model_path and scaler_path:
+            try:
+                import joblib
+                self.model = joblib.load(model_path)
+                self.scaler = joblib.load(scaler_path)
+                print(f"Loaded model from {model_path}")
+                print(f"Loaded scaler from {scaler_path}")
+            except Exception as e:
+                print(f"Error loading model or scaler: {e}")
+        
+        # Counter for positive predictions
+        self.positive_predictions: Dict[str, int] = {}  # RNTI -> count of positive predictions
 
     def start(self):
         """Start the controller and all its connections"""
@@ -279,7 +298,7 @@ class PetsController:
         """Initialize priority for a new UE"""
         self.ue_priorities[rnti] = 0.0
 
-    def normalize_slot(self, rnti: str, slot: int) -> int:
+    def normalize_slot(self, rnti: str, slot: int, event_type: str) -> int:
         """
         Convert cyclic slots (0-20480) into a continuous increasing sequence
         relative to the first ever event's slot
@@ -288,23 +307,33 @@ class PetsController:
         
         if rnti not in self.ue_first_slots:
             self.ue_first_slots[rnti] = slot
-            self.ue_slot_cycles[rnti] = 0
+            self.ue_slot_cycles_prb[rnti] = 0
+            self.ue_slot_cycles_ctrl[rnti] = 0
             return 0
             
-        # Check if we've wrapped around relative to the first slot
-        current_cycle = self.ue_slot_cycles[rnti]
-        base_slot = self.ue_first_slots[rnti]
-        
-        # Convert current slot to absolute position relative to base slot
-        if slot < base_slot - SLOT_MAX//2:
-            current_cycle += 1
-        elif slot > base_slot + SLOT_MAX//2:
-            current_cycle -= 1
+        # Choose the appropriate cycle counter based on event type
+        if event_type == 'PRB':
+            cycles = self.ue_slot_cycles_prb
+            # Get the previous PRB slot
+            prev_events = [e for e in self.window_events[rnti] if e[0] == self.EVENT_TYPES['PRB']]
+        else:  # SR or BSR
+            cycles = self.ue_slot_cycles_ctrl
+            # Get the previous control slot (SR or BSR)
+            prev_events = [e for e in self.window_events[rnti] 
+                         if e[0] in [self.EVENT_TYPES['SR'], self.EVENT_TYPES['BSR']]]
             
-        self.ue_slot_cycles[rnti] = current_cycle
-        absolute_slot = slot + (current_cycle * SLOT_MAX)
+        if not prev_events:  # No previous events of this type
+            return slot - self.ue_first_slots[rnti]
+            
+        # Get the previous raw slot
+        prev_raw_slot = prev_events[-1][4] + self.ue_first_slots[rnti] - cycles[rnti] * SLOT_MAX
         
-        return absolute_slot - base_slot
+        # If new slot is less than previous slot, we've wrapped around
+        if slot < prev_raw_slot:
+            cycles[rnti] += 1
+
+        absolute_slot = slot + (cycles[rnti] * SLOT_MAX)
+        return absolute_slot - self.ue_first_slots[rnti]
 
     def add_event(self, rnti: str, event_type: str, timestamp: float, slot: int, **values):
         """
@@ -316,7 +345,7 @@ class PetsController:
             self.ue_base_times[rnti] = timestamp
             
         # Normalize slot
-        normalized_slot = self.normalize_slot(rnti, slot)
+        normalized_slot = self.normalize_slot(rnti, slot, event_type)
         
         # Create event array
         event = np.zeros(6, dtype=np.float32)
@@ -365,6 +394,81 @@ class PetsController:
         
         print("-" * 60)
 
+    def extract_window_features(self, events, window_bsr_indices):
+        """
+        Extract features for a window between BSRs
+        Returns features in the same order as training
+        """
+        all_features = []
+        
+        # Get the last BSR's slot as the search end slot
+        final_bsr_slot = events[window_bsr_indices[-1]][4]
+        
+        # Process each BSR interval in the window
+        for i in range(len(window_bsr_indices)-1):
+            current_start_idx = window_bsr_indices[i]
+            current_end_idx = window_bsr_indices[i + 1]
+            
+            start_bsr = events[current_start_idx]
+            end_bsr = events[current_end_idx]
+            
+            # Find first PRB after start_bsr but before final_bsr
+            first_prb_slot = final_bsr_slot  # Default to final BSR slot if no PRB found
+            search_idx = current_start_idx + 1
+            while search_idx < len(events):
+                if events[search_idx][0] == self.EVENT_TYPES['PRB']:
+                    first_prb_slot = events[search_idx][4]
+                    break
+                if events[search_idx][4] > final_bsr_slot:
+                    break
+                search_idx += 1
+            
+            # Calculate slot difference until first PRB
+            slots_until_prb = first_prb_slot - start_bsr[4]
+            
+            # Calculate other features
+            bsr_diff = end_bsr[1] - start_bsr[1]
+            end_bsr_value = end_bsr[1]
+            
+            total_prbs = 0
+            sr_count = 0
+            prb_events = 0
+            
+            for event in events[current_start_idx+1:current_end_idx]:
+                if event[0] == self.EVENT_TYPES['PRB']:
+                    total_prbs += event[2]
+                    prb_events += 1
+                elif event[0] == self.EVENT_TYPES['SR']:
+                    sr_count += 1
+            
+            # Calculate window duration in slots
+            window_slots = end_bsr[4] - start_bsr[4]
+            
+            # Calculate BSR per PRB
+            bsr_per_prb = bsr_diff / (total_prbs + 1e-6)
+            
+            # Calculate rates using slots (multiply by 1000 to convert to per-millisecond rate)
+            window_duration_ms = window_slots * 0.5  # Assuming each slot is 0.5ms
+            bsr_update_rate = 1000.0 / (window_duration_ms + 1e-6)
+            sr_rate = sr_count * 1000.0 / (window_duration_ms + 1e-6)
+            
+            # Features in the same order as training
+            interval_features = np.array([
+                bsr_diff,           # Difference between BSRs
+                total_prbs,         # Total PRBs allocated
+                sr_count,           # Number of SR events
+                end_bsr_value,      # Value of the end BSR
+                bsr_per_prb,        # BSR difference normalized by PRBs
+                window_slots,       # Time duration in slots
+                bsr_update_rate,    # Rate of BSR updates
+                sr_rate,            # Rate of SR events
+                slots_until_prb,    # Slots until first PRB after BSR
+            ])
+            
+            all_features.append(interval_features)
+        
+        return np.concatenate(all_features)
+
     def update_window(self, rnti: str):
         """
         Update the sliding window when a new BSR event arrives
@@ -378,29 +482,57 @@ class PetsController:
             # Window full, remove events before the window
             start_idx = bsr_indices[-(self.window_size + 1)]
             self.window_events[rnti] = self.window_events[rnti][start_idx:]
+            # If model is loaded, do inference
+            if self.model is not None and self.scaler is not None:
+                # Get new BSR indices after window update
+                new_bsr_indices = [i for i, e in enumerate(self.window_events[rnti]) 
+                                 if e[0] == self.EVENT_TYPES['BSR']]
+                
+                # Check if latest BSR bytes increased
+                latest_bsr = self.window_events[rnti][new_bsr_indices[-1]]
+                prev_bsr = self.window_events[rnti][new_bsr_indices[-2]]
+                bsr_increased = latest_bsr[1] > prev_bsr[1]
+                
+                # Get model prediction
+                features = self.extract_window_features(self.window_events[rnti], new_bsr_indices)
+                features_scaled = self.scaler.transform(features.reshape(1, -1))
+                model_prediction = self.model.predict(features_scaled)[0]
+                
+                # Final prediction is OR of model prediction and BSR increase
+                prediction = int(bool(model_prediction) or bool(bsr_increased))
+                
+                # Update positive prediction counter
+                if prediction:
+                    if rnti not in self.positive_predictions:
+                        self.positive_predictions[rnti] = 0
+                    self.positive_predictions[rnti] += 1
+                
+                self.log(f"Prediction for RNTI {rnti}: {prediction} at {time.time()} "
+                        f"(model_pred={model_prediction}, bsr_increased={bsr_increased}, "
+                        f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}")
 
     def _handle_sr_metrics(self, values):
         """Handle SR indication metrics"""
         rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
-        self.add_event(rnti, 'SR', time.time(), slot)
         self.log(f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}")
+        self.add_event(rnti, 'SR', time.time(), slot)
 
     def _handle_bsr_metrics(self, values):
         """Handle BSR metrics"""
         rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
         bytes_val = int(values['BYTES'])
-        self.add_event(rnti, 'BSR', time.time(), slot, bytes=bytes_val)
         self.log(f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes_val} at {time.time()}")
+        self.add_event(rnti, 'BSR', time.time(), slot, bytes=bytes_val)
 
     def _handle_prb_metrics(self, values):
         """Handle PRB allocation metrics"""
         rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
         prbs = int(values['PRBs'])
-        self.add_event(rnti, 'PRB', time.time(), slot, prbs=prbs)
         self.log(f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at {time.time()}")
+        self.add_event(rnti, 'PRB', time.time(), slot, prbs=prbs)
 
     def log(self, message: str):
         """Helper method for logging"""
@@ -414,9 +546,21 @@ def main():
                       help='Enable logging to file (default: False)')
     parser.add_argument('--window-size', type=int, default=5,
                       help='Size of the window for analysis (default: 5)')
+    parser.add_argument('--model-path', type=str,
+                      default='labeled_data/models/bsr_only_xgboost.joblib',
+                      help='Path to the trained model for inference (default: labeled_data/bsr_only_xgboost.joblib)')
+    parser.add_argument('--scaler-path', type=str,
+                      default='labeled_data/models/bsr_only_scaler.joblib',
+                      help='Path to the scaler for the model (default: labeled_data/bsr_only_scaler.joblib)')
     args = parser.parse_args()
     
-    controller = PetsController(enable_logging=args.log, window_size=args.window_size)
+    controller = PetsController(
+        enable_logging=args.log, 
+        window_size=args.window_size,
+        model_path=args.model_path,
+        scaler_path=args.scaler_path
+    )
+    
     if controller.start():
         try:
             while True:
