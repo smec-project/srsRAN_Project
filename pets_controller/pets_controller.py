@@ -103,6 +103,10 @@ class PetsController:
         # Counter for positive predictions
         self.positive_predictions: Dict[str, int] = {}  # RNTI -> count of positive predictions
         
+        # Track request remaining times for each UE
+        self.ue_remaining_times: Dict[str, list] = {}  # RNTI -> list of (request_id, remaining_time)
+        self.ue_last_event_time: Dict[str, float] = {}  # RNTI -> timestamp of last event
+        
         # Use global base slot for normalization
         self.global_base_slot = None  # Will be set by first event
 
@@ -422,14 +426,30 @@ class PetsController:
         if rnti not in self.window_events:
             self.window_events[rnti] = []
             self.ue_base_times[rnti] = timestamp
+            self.ue_last_event_time[rnti] = timestamp
             
+        # Update remaining times for all requests
+        if rnti in self.ue_remaining_times and self.ue_remaining_times[rnti]:
+            time_passed = (timestamp - self.ue_last_event_time[rnti]) * 1000  # Convert to ms
+            if time_passed > 0:
+                # Update all remaining times
+                updated_times = []
+                for req_id, remaining in self.ue_remaining_times[rnti]:
+                    new_remaining = remaining - time_passed
+                    if new_remaining > 0:  # Only keep requests with remaining time > 0
+                        updated_times.append((req_id, new_remaining))
+                self.ue_remaining_times[rnti] = updated_times
+        
+        # Update last event time
+        self.ue_last_event_time[rnti] = timestamp
+        
         # Normalize slot
         normalized_slot = self.normalize_slot(rnti, slot, event_type)
         
         # Update global max PRB slot if this is a PRB event
         if event_type == 'PRB':
             self.gnb_max_prb_slot = max(self.gnb_max_prb_slot, normalized_slot)
-        
+            
         # Create event array
         event = np.zeros(6, dtype=np.float32)
         event[0] = self.EVENT_TYPES[event_type]  # Event type
@@ -553,10 +573,7 @@ class PetsController:
         return np.concatenate(all_features)
 
     def update_window(self, rnti: str):
-        """
-        Update the sliding window when a new BSR event arrives
-        Only keep events between the last window_size+1 BSRs
-        """
+        """Update the sliding window when a new BSR event arrives"""
         # Find all BSR indices in current events
         bsr_indices = [i for i, e in enumerate(self.window_events[rnti]) 
                       if e[0] == self.EVENT_TYPES['BSR']]
@@ -565,6 +582,7 @@ class PetsController:
             # Window full, remove events before the window
             start_idx = bsr_indices[-(self.window_size + 1)]
             self.window_events[rnti] = self.window_events[rnti][start_idx:]
+            
             # If model is loaded, do inference
             if self.model is not None and self.scaler is not None:
                 # Get new BSR indices after window update
@@ -584,50 +602,59 @@ class PetsController:
                 # Final prediction is OR of model prediction and BSR increase
                 prediction = int(bool(model_prediction) or bool(bsr_increased))
                 
-                # Calculate remaining time if prediction is 1
-                remaining_time = self.ue_info[rnti]['latency_req']
-                if prediction:
-                    # Get latest BSR and its corresponding PRB
-                    latest_bsr_idx = new_bsr_indices[-1]
-                    latest_bsr_slot = self.window_events[rnti][latest_bsr_idx][4]
-                    latest_bsr_time = self.window_events[rnti][latest_bsr_idx][3]
-                    
-                    # Find corresponding PRB (same slot as BSR)
-                    prb_time = None
-                    for i in range(latest_bsr_idx, -1, -1):
-                        event = self.window_events[rnti][i]
-                        if event[0] == self.EVENT_TYPES['PRB'] and event[4] == latest_bsr_slot:
-                            prb_time = event[3]
-                            break
-                    
-                    if prb_time is not None:
-                        # Check if there's an SR between last two BSRs and get earliest SR time
-                        has_sr = False
-                        earliest_sr_time = None
-                        prev_bsr_idx = new_bsr_indices[-2]
-                        for i in range(prev_bsr_idx, latest_bsr_idx):
-                            if self.window_events[rnti][i][0] == self.EVENT_TYPES['SR']:
-                                has_sr = True
-                                earliest_sr_time = self.window_events[rnti][i][3]
+                # Get latest BSR value
+                latest_bsr = self.window_events[rnti][new_bsr_indices[-1]]
+                
+                # If BSR is 0, clear all remaining times
+                if latest_bsr[1] == 0:
+                    if rnti in self.ue_remaining_times:
+                        self.ue_remaining_times[rnti] = []
+                else:
+                    # If prediction is 1, add new request with initial remaining time
+                    if prediction:
+                        # Update positive prediction counter
+                        if rnti not in self.positive_predictions:
+                            self.positive_predictions[rnti] = 0
+                        self.positive_predictions[rnti] += 1
+                        
+                        # Calculate initial remaining time
+                        remaining_time = self.ue_info[rnti]['latency_req']
+                        prb_time = None
+                        for i in range(new_bsr_indices[-1], -1, -1):
+                            event = self.window_events[rnti][i]
+                            if event[0] == self.EVENT_TYPES['PRB'] and event[4] == latest_bsr[4]:
+                                prb_time = event[3]
                                 break
                         
-                        if has_sr:
-                            remaining_time = remaining_time - ((latest_bsr_time - earliest_sr_time) * 1000 + 5) - (self.gnb_max_prb_slot - latest_bsr_slot) * 0.5
-                        else:
-                            remaining_time = remaining_time - ((latest_bsr_time - prb_time) * 1000) - (self.gnb_max_prb_slot - latest_bsr_slot) * 0.5
-                
-                # Update positive prediction counter
-                if prediction:
-                    if rnti not in self.positive_predictions:
-                        self.positive_predictions[rnti] = 0
-                    self.positive_predictions[rnti] += 1
-                
-                # Log prediction and remaining time
-                log_msg = f"Prediction for RNTI {rnti}: {prediction} at {time.time()}, "
-                log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
-                log_msg += f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}"
-                log_msg += f", Remaining_time={remaining_time:.2f}ms"
-                self.log(log_msg)
+                        if prb_time is not None:
+                            # Check if there's an SR between last two BSRs and get earliest SR time
+                            has_sr = False
+                            earliest_sr_time = None
+                            prev_bsr_idx = new_bsr_indices[-2]
+                            for i in range(prev_bsr_idx, new_bsr_indices[-1]):
+                                if self.window_events[rnti][i][0] == self.EVENT_TYPES['SR']:
+                                    has_sr = True
+                                    earliest_sr_time = self.window_events[rnti][i][3]
+                                    break
+                            
+                            if has_sr:
+                                remaining_time = remaining_time - ((latest_bsr[3] - earliest_sr_time) * 1000 + 5) - (self.gnb_max_prb_slot - latest_bsr[4]) * 0.5
+                            else:
+                                remaining_time = remaining_time - ((latest_bsr[3] - prb_time) * 1000) - (self.gnb_max_prb_slot - latest_bsr[4]) * 0.5
+                    
+                        # Add new request with its remaining time, using timestamp as ID
+                        if rnti not in self.ue_remaining_times:
+                            self.ue_remaining_times[rnti] = []
+                        self.ue_remaining_times[rnti].append((self.positive_predictions[rnti], remaining_time))  # Use timestamp as request ID
+                    
+                    # Log prediction and all remaining times
+                    log_msg = f"Prediction for RNTI {rnti}: {prediction} at {time.time()}, "
+                    log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
+                    log_msg += f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}"
+                    if rnti in self.ue_remaining_times:
+                        for req_label, remaining in self.ue_remaining_times[rnti]:
+                            log_msg += f", Request_{req_label}_remaining={remaining:.2f}ms"
+                    self.log(log_msg)
 
     def _handle_sr_metrics(self, values):
         """Handle SR indication metrics"""
