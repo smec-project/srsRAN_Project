@@ -6,6 +6,7 @@ import math
 from typing import Dict, Optional
 import argparse
 import numpy as np
+from collections import deque
 
 class PetsController:
     def __init__(
@@ -54,10 +55,17 @@ class PetsController:
         
         # Track UE priority states
         self.ue_priorities: Dict[str, float] = {}  # RNTI -> current_priority
+        self.ue_bsr_events: Dict[str, deque] = {}  # RNTI -> deque of (bytes, slot) tuples
+        self.ue_last_bsr: Dict[str, tuple] = {}  # RNTI -> (bytes, slot) of last BSR
+        self.ue_peak_buffer_size: Dict[str, int] = {}  # RNTI -> peak buffer size
         
-        # Add mapping between UE_IDX and RNTI
-        self.ue_idx_to_rnti = {}  # UE_IDX -> RNTI
-        self.rnti_to_ue_idx = {}  # RNTI -> UE_IDX
+        # Track global gNB PRB allocation max slot
+        self.gnb_max_prb_slot = 0
+        
+        # Add DDL tracking
+        self.ue_ddl: Dict[str, float] = {}  # RNTI -> current DDL
+        self.ue_last_priority: Dict[str, float] = {}  # RNTI -> last priority state (for reset tracking)
+        self.MIN_DDL = 0.1  # Minimum DDL value (ms)
         
         # Window size for analysis
         self.window_size = window_size
@@ -68,7 +76,6 @@ class PetsController:
         
         # Store events for each RNTI
         self.window_events: Dict[str, list] = {}  # RNTI -> list of events in window
-        self.ue_first_slots: Dict[str, int] = {}  # RNTI -> first slot number
         self.ue_slot_cycles_prb: Dict[str, int] = {}  # RNTI -> current PRB slot cycle
         self.ue_slot_cycles_ctrl: Dict[str, int] = {}  # RNTI -> current SR/BSR slot cycle
         self.ue_base_times: Dict[str, float] = {}  # RNTI -> base timestamp
@@ -95,6 +102,9 @@ class PetsController:
         
         # Counter for positive predictions
         self.positive_predictions: Dict[str, int] = {}  # RNTI -> count of positive predictions
+        
+        # Use global base slot for normalization
+        self.global_base_slot = None  # Will be set by first event
 
     def start(self):
         """Start the controller and all its connections"""
@@ -112,7 +122,73 @@ class PetsController:
         threading.Thread(target=self._handle_app_connections, daemon=True).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
         
+        # Start priority update thread
+        threading.Thread(target=self._update_priorities, daemon=True).start()
         return True
+    
+    def _update_priorities(self):
+        """
+        Continuously update priorities based on BSR and DDL
+        - Priority = BSR/DDL
+        - DDL decreases from latency requirement
+        - Reset priority when BSR becomes 0
+        """
+        while self.running:
+            try:
+                for rnti in list(self.ue_info.keys()):
+                    # Skip if no BSR data yet
+                    if rnti not in self.ue_bsr_events or not self.ue_bsr_events[rnti]:
+                        continue
+                        
+                    # Get and remove oldest BSR event from queue
+                    current_bsr, current_slot = self.ue_bsr_events[rnti].popleft()
+                    
+                    # Get previous BSR info if exists
+                    if rnti in self.ue_last_bsr:
+                        prev_bsr, prev_slot = self.ue_last_bsr[rnti]
+                        slot_diff = current_slot - prev_slot
+                        time_diff = slot_diff * 0.5  # Convert slots to ms
+                    else:
+                        time_diff = 0  # First BSR, no time difference
+                    
+                    # Handle BSR = 0 case
+                    if current_bsr == 0:
+                        # Only reset if not already reset
+                        if self.ue_last_priority.get(rnti, 0) != 0:
+                            self.reset_priority(rnti)
+                            self.ue_last_priority[rnti] = 0
+                            # Reset DDL to initial latency requirement
+                            self.ue_ddl[rnti] = self.ue_info[rnti]['latency_req']
+                        self.ue_last_bsr[rnti] = (current_bsr, current_slot)
+                        continue
+                    
+                    # Update DDL
+                    if rnti not in self.ue_ddl:
+                        # Initialize DDL with latency requirement
+                        self.ue_ddl[rnti] = self.ue_info[rnti]['latency_req']
+                    else:
+                        if current_bsr > prev_bsr:
+                            self.ue_ddl[rnti] = self.ue_info[rnti]['latency_req'] - 10
+                            self.ue_peak_buffer_size[rnti] = current_bsr
+                        else:
+                            self.ue_ddl[rnti] = max(self.MIN_DDL, self.ue_ddl[rnti] - time_diff)
+                    
+                    # Calculate and set new priority
+                    # priority = self.ue_peak_buffer_size[rnti] / self.ue_ddl[rnti]
+                    priority = 100000 / self.ue_info[rnti]['latency_req']
+                    self.set_priority(rnti, priority)
+                    self.ue_last_priority[rnti] = priority
+                    self.ue_last_bsr[rnti] = (current_bsr, current_slot)
+                    
+                    self.log(f"Updated priority for RNTI {rnti}: BSR={current_bsr}, "
+                           f"DDL={self.ue_ddl[rnti]:.1f}, Priority={priority:.2f}, "
+                           f"Time_diff={time_diff:.1f}ms")
+                    
+            except Exception as e:
+                self.log(f"Error in priority update thread: {e}")
+            
+            # Sleep briefly to avoid busy waiting
+            time.sleep(0.0001)  # 0.1ms interval
 
     def _handle_app_connections(self):
         """Handle incoming application connections and messages"""
@@ -301,12 +377,15 @@ class PetsController:
     def normalize_slot(self, rnti: str, slot: int, event_type: str) -> int:
         """
         Convert cyclic slots (0-20480) into a continuous increasing sequence
-        relative to the first ever event's slot
+        relative to the global base slot
         """
         SLOT_MAX = 20480
         
-        if rnti not in self.ue_first_slots:
-            self.ue_first_slots[rnti] = slot
+        if self.global_base_slot is None:
+            self.global_base_slot = slot
+            return 0
+        
+        if rnti not in self.ue_slot_cycles_prb:
             self.ue_slot_cycles_prb[rnti] = 0
             self.ue_slot_cycles_ctrl[rnti] = 0
             return 0
@@ -323,17 +402,17 @@ class PetsController:
                          if e[0] in [self.EVENT_TYPES['SR'], self.EVENT_TYPES['BSR']]]
             
         if not prev_events:  # No previous events of this type
-            return slot - self.ue_first_slots[rnti]
+            return slot - self.global_base_slot
             
         # Get the previous raw slot
-        prev_raw_slot = prev_events[-1][4] + self.ue_first_slots[rnti] - cycles[rnti] * SLOT_MAX
+        prev_raw_slot = prev_events[-1][4] + self.global_base_slot - cycles[rnti] * SLOT_MAX
         
         # If new slot is less than previous slot, we've wrapped around
         if slot < prev_raw_slot:
             cycles[rnti] += 1
-
+            
         absolute_slot = slot + (cycles[rnti] * SLOT_MAX)
-        return absolute_slot - self.ue_first_slots[rnti]
+        return absolute_slot - self.global_base_slot
 
     def add_event(self, rnti: str, event_type: str, timestamp: float, slot: int, **values):
         """
@@ -347,13 +426,17 @@ class PetsController:
         # Normalize slot
         normalized_slot = self.normalize_slot(rnti, slot, event_type)
         
+        # Update global max PRB slot if this is a PRB event
+        if event_type == 'PRB':
+            self.gnb_max_prb_slot = max(self.gnb_max_prb_slot, normalized_slot)
+        
         # Create event array
         event = np.zeros(6, dtype=np.float32)
         event[0] = self.EVENT_TYPES[event_type]  # Event type
         event[1] = values.get('bytes', 0)  # BSR bytes
         event[2] = values.get('prbs', 0)   # PRBs
-        event[3] = timestamp - self.ue_base_times[rnti]  # Relative timestamp from first event
-        event[4] = normalized_slot  # Normalized slot from first event
+        event[3] = timestamp - self.ue_base_times[rnti]  # Relative timestamp
+        event[4] = normalized_slot  # Normalized slot
         event[5] = 0  # Label (not used in controller)
         
         # Insert event in sorted position based on slot
@@ -501,15 +584,50 @@ class PetsController:
                 # Final prediction is OR of model prediction and BSR increase
                 prediction = int(bool(model_prediction) or bool(bsr_increased))
                 
+                # Calculate remaining time if prediction is 1
+                remaining_time = self.ue_info[rnti]['latency_req']
+                if prediction:
+                    # Get latest BSR and its corresponding PRB
+                    latest_bsr_idx = new_bsr_indices[-1]
+                    latest_bsr_slot = self.window_events[rnti][latest_bsr_idx][4]
+                    latest_bsr_time = self.window_events[rnti][latest_bsr_idx][3]
+                    
+                    # Find corresponding PRB (same slot as BSR)
+                    prb_time = None
+                    for i in range(latest_bsr_idx, -1, -1):
+                        event = self.window_events[rnti][i]
+                        if event[0] == self.EVENT_TYPES['PRB'] and event[4] == latest_bsr_slot:
+                            prb_time = event[3]
+                            break
+                    
+                    if prb_time is not None:
+                        # Check if there's an SR between last two BSRs and get earliest SR time
+                        has_sr = False
+                        earliest_sr_time = None
+                        prev_bsr_idx = new_bsr_indices[-2]
+                        for i in range(prev_bsr_idx, latest_bsr_idx):
+                            if self.window_events[rnti][i][0] == self.EVENT_TYPES['SR']:
+                                has_sr = True
+                                earliest_sr_time = self.window_events[rnti][i][3]
+                                break
+                        
+                        if has_sr:
+                            remaining_time = remaining_time - ((latest_bsr_time - earliest_sr_time) * 1000 + 5) - (self.gnb_max_prb_slot - latest_bsr_slot) * 0.5
+                        else:
+                            remaining_time = remaining_time - ((latest_bsr_time - prb_time) * 1000) - (self.gnb_max_prb_slot - latest_bsr_slot) * 0.5
+                
                 # Update positive prediction counter
                 if prediction:
                     if rnti not in self.positive_predictions:
                         self.positive_predictions[rnti] = 0
                     self.positive_predictions[rnti] += 1
                 
-                self.log(f"Prediction for RNTI {rnti}: {prediction} at {time.time()} "
-                        f"(model_pred={model_prediction}, bsr_increased={bsr_increased}, "
-                        f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}")
+                # Log prediction and remaining time
+                log_msg = f"Prediction for RNTI {rnti}: {prediction} at {time.time()}, "
+                log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
+                log_msg += f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}"
+                log_msg += f", Remaining_time={remaining_time:.2f}ms"
+                self.log(log_msg)
 
     def _handle_sr_metrics(self, values):
         """Handle SR indication metrics"""
@@ -523,6 +641,14 @@ class PetsController:
         rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
         bytes_val = int(values['BYTES'])
+        
+        # Initialize FIFO queue if not exists
+        if rnti not in self.ue_bsr_events:
+            self.ue_bsr_events[rnti] = deque()
+            
+        # Add new BSR event to queue
+        self.ue_bsr_events[rnti].append((bytes_val, slot))
+            
         self.log(f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes_val} at {time.time()}")
         self.add_event(rnti, 'BSR', time.time(), slot, bytes=bytes_val)
 
