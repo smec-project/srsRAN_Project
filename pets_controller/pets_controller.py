@@ -132,67 +132,43 @@ class PetsController:
     
     def _update_priorities(self):
         """
-        Continuously update priorities based on BSR and DDL
-        - Priority = BSR/DDL
-        - DDL decreases from latency requirement
-        - Reset priority when BSR becomes 0
+        Update priorities based on the oldest request's remaining time
+        - Priority increases as remaining time decreases
+        - Reset priority when no requests pending
         """
         while self.running:
             try:
                 for rnti in list(self.ue_info.keys()):
-                    # Skip if no BSR data yet
-                    if rnti not in self.ue_bsr_events or not self.ue_bsr_events[rnti]:
-                        continue
+                    if self.ue_priorities.get(rnti, -1) == -1:
+                        self._initialize_ue_priority(rnti)
+                    # Get the oldest request's remaining time
+                    if rnti in self.ue_remaining_times and self.ue_remaining_times[rnti]:
+                        # Get first (oldest) request's remaining time
+                        oldest_req = self.ue_remaining_times[rnti][0]
+                        current_remaining = oldest_req[1]
                         
-                    # Get and remove oldest BSR event from queue
-                    current_bsr, current_slot = self.ue_bsr_events[rnti].popleft()
-                    
-                    # Get previous BSR info if exists
-                    if rnti in self.ue_last_bsr:
-                        prev_bsr, prev_slot = self.ue_last_bsr[rnti]
-                        slot_diff = current_slot - prev_slot
-                        time_diff = slot_diff * 0.5  # Convert slots to ms
+                        # Convert remaining time from ms to s and calculate priority
+                        remaining_seconds = current_remaining / 1000.0
+                        priority = 1.0 / (remaining_seconds * remaining_seconds + 1e-6)
+                        
+                        # Only update if priority changed
+                        if self.ue_priorities.get(rnti, 0) != priority:
+                            self.set_priority(rnti, priority)
+                            self.ue_priorities[rnti] = priority
+                            self.log(f"Updated priority for RNTI {rnti}: Priority={priority:.2f}, "
+                                   f"Remaining_time={current_remaining:.2f}ms")
                     else:
-                        time_diff = 0  # First BSR, no time difference
-                    
-                    # Handle BSR = 0 case
-                    if current_bsr == 0:
-                        # Only reset if not already reset
-                        if self.ue_last_priority.get(rnti, 0) != 0:
+                        # Reset priority if not already reset
+                        if self.ue_priorities.get(rnti, 0) != 0:
                             self.reset_priority(rnti)
-                            self.ue_last_priority[rnti] = 0
-                            # Reset DDL to initial latency requirement
-                            self.ue_ddl[rnti] = self.ue_info[rnti]['latency_req']
-                        self.ue_last_bsr[rnti] = (current_bsr, current_slot)
-                        continue
-                    
-                    # Update DDL
-                    if rnti not in self.ue_ddl:
-                        # Initialize DDL with latency requirement
-                        self.ue_ddl[rnti] = self.ue_info[rnti]['latency_req']
-                    else:
-                        if current_bsr > prev_bsr:
-                            self.ue_ddl[rnti] = self.ue_info[rnti]['latency_req'] - 10
-                            self.ue_peak_buffer_size[rnti] = current_bsr
-                        else:
-                            self.ue_ddl[rnti] = max(self.MIN_DDL, self.ue_ddl[rnti] - time_diff)
-                    
-                    # Calculate and set new priority
-                    # priority = self.ue_peak_buffer_size[rnti] / self.ue_ddl[rnti]
-                    priority = 100000 / self.ue_info[rnti]['latency_req']
-                    self.set_priority(rnti, priority)
-                    self.ue_last_priority[rnti] = priority
-                    self.ue_last_bsr[rnti] = (current_bsr, current_slot)
-                    
-                    self.log(f"Updated priority for RNTI {rnti}: BSR={current_bsr}, "
-                           f"DDL={self.ue_ddl[rnti]:.1f}, Priority={priority:.2f}, "
-                           f"Time_diff={time_diff:.1f}ms")
+                            self.ue_priorities[rnti] = 0
+                            self.log(f"Reset priority for RNTI {rnti}")
                     
             except Exception as e:
                 self.log(f"Error in priority update thread: {e}")
             
             # Sleep briefly to avoid busy waiting
-            time.sleep(0.0001)  # 0.1ms interval
+            time.sleep(0.001)  # 1ms interval
 
     def _handle_app_connections(self):
         """Handle incoming application connections and messages"""
