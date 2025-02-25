@@ -59,6 +59,9 @@ class PetsController:
         self.ue_last_bsr: Dict[str, tuple] = {}  # RNTI -> (bytes, slot) of last BSR
         self.ue_peak_buffer_size: Dict[str, int] = {}  # RNTI -> peak buffer size
         
+        # Track latest BSR state for each UE
+        self.ue_latest_bsr: Dict[str, int] = {}  # RNTI -> latest BSR bytes
+        
         # Track global gNB PRB allocation max slot
         self.gnb_max_prb_slot = 0
         
@@ -135,12 +138,14 @@ class PetsController:
         Update priorities based on the oldest request's remaining time
         - Priority increases as remaining time decreases
         - Reset priority when no requests pending
+        - Skip priority updates for requests with latency requirements > 3s
         """
         while self.running:
             try:
                 for rnti in list(self.ue_info.keys()):
                     if self.ue_priorities.get(rnti, -1) == -1:
                         self._initialize_ue_priority(rnti)
+                        
                     # Get the oldest request's remaining time
                     if rnti in self.ue_remaining_times and self.ue_remaining_times[rnti]:
                         # Get first (oldest) request's remaining time
@@ -149,7 +154,9 @@ class PetsController:
                         
                         # Convert remaining time from ms to s and calculate priority
                         remaining_seconds = current_remaining / 1000.0
-                        priority = 1.0 / (remaining_seconds * remaining_seconds + 1e-6)
+                        current_bsr = self.ue_latest_bsr.get(rnti, 0)
+                        priority = current_bsr / (remaining_seconds * remaining_seconds + 1e-6)
+                        # priority = 1.0 / (remaining_seconds * remaining_seconds + 1e-6)
                         
                         # Only update if priority changed
                         if self.ue_priorities.get(rnti, 0) != priority:
@@ -644,6 +651,9 @@ class PetsController:
         rnti = values['RNTI'][-4:]
         slot = int(values['SLOT'])
         bytes_val = int(values['BYTES'])
+        
+        # Update latest BSR state
+        self.ue_latest_bsr[rnti] = bytes_val
         
         # Initialize FIFO queue if not exists
         if rnti not in self.ue_bsr_events:
