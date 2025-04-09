@@ -6,6 +6,8 @@
 #   sudo ./gnb -c gnb_rf_b200_tdd_n78_20mhz.yml -c low_latency.yml
 
 cell_cfg:
+  nof_antennas_ul: 2
+  nof_antennas_dl: 2
   pusch:
     min_k2: 4
   pucch:

@@ -83,7 +83,7 @@ class TuttiController:
         # Connect to RAN services
         try:
             self.ran_metrics_socket.connect((self.ran_metrics_ip, self.ran_metrics_port))
-            self.ran_control_socket.connect((self.ran_control_ip, self.ran_control_port))
+            # self.ran_control_socket.connect((self.ran_control_ip, self.ran_control_port))
         except Exception as e:
             self.log_file.write(f"Failed to connect to RAN services: {e}\n")
             self.log_file.flush()
