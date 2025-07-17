@@ -754,8 +754,11 @@ def main():
     parser.add_argument("--val", help="Path to validation data file (.npy)")
     parser.add_argument(
         "--base-dir",
-        default="labeled_data",
-        help="Base directory for data files and output (default: labeled_data)",
+        default=".",
+        help=(
+            "Base directory for data files and output (default: current"
+            " directory)"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -820,10 +823,10 @@ def main():
 
             # Load model and scaler
             model_path = os.path.join(
-                "labeled_data/models", f"{args.label_type}_{args.model}.joblib"
+                output_dir, f"{args.label_type}_{args.model}.joblib"
             )
             scaler_path = os.path.join(
-                "labeled_data/models", f"{args.label_type}_scaler.joblib"
+                output_dir, f"{args.label_type}_scaler.joblib"
             )
 
             if not os.path.exists(model_path) or not os.path.exists(
