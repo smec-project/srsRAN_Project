@@ -36,12 +36,12 @@ cell_cfg:
     policy_sched_cfg:
       pf_sched:
         pf_sched_fairness_coeff: 2.0
-  tdd_ul_dl_cfg:
-    dl_ul_tx_period: 5    
-    nof_dl_slots: 3
-    nof_dl_symbols: 6
-    nof_ul_slots: 1
-    nof_ul_symbols: 4 
+  # tdd_ul_dl_cfg:
+  #   dl_ul_tx_period: 5    
+  #   nof_dl_slots: 3
+  #   nof_dl_symbols: 6
+  #   nof_ul_slots: 1
+  #   nof_ul_symbols: 4 
 
 log:
   filename: /tmp/gnb.log

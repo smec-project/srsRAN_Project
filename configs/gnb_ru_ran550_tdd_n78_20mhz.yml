@@ -4,7 +4,7 @@
 
 cu_cp:
   amf:
-    addr: 127.0.1.100
+    addr: 127.0.0.5
     port: 38412
     bind_addr: 127.0.0.1
     supported_tracking_areas:
@@ -15,30 +15,29 @@ cu_cp:
               - sst: 1
 
 ru_ofh:
-  ru_bandwidth_MHz: 100
-  t1a_max_cp_dl: 535
-  t1a_min_cp_dl: 286
-  t1a_max_cp_ul: 535
-  t1a_min_cp_ul: 286
-  t1a_max_up: 390
-  t1a_min_up: 80
-  ta4_max: 500
-  ta4_min: 25
-  is_prach_cp_enabled: false
+  t1a_max_cp_dl: 500
+  t1a_min_cp_dl: 258
+  t1a_max_cp_ul: 465
+  t1a_min_cp_ul: 285
+  t1a_max_up: 250
+  t1a_min_up: 50
+  ta4_max: 200                                                    # Maximum Ta4 on User-Plane in microseconds.
+  ta4_min: 0
+  is_prach_cp_enabled: true
   is_dl_broadcast_enabled: true
   compr_method_ul: bfp
   compr_bitwidth_ul: 9
   compr_method_dl: bfp
+  compr_bitwidth_dl: 9
   compr_method_prach: bfp
   compr_bitwidth_prach: 9
-  compr_bitwidth_dl: 9
-  enable_ul_static_compr_hdr: true
-  enable_dl_static_compr_hdr: true
-  iq_scaling: 5.5
+  enable_ul_static_compr_hdr: false
+  enable_dl_static_compr_hdr: false
+  iq_scaling: 4.5
   cells:
-    - network_interface: enp1s0f0
-      ru_mac_addr: 70:b3:d5:e1:5b:06
-      du_mac_addr: 80:61:5f:0d:df:aa
+    - network_interface: eno8403np1          # Replace with the DU network interface name (or BDF) for the DU <-> RU connection.
+      ru_mac_addr: 8c:1f:64:d1:13:d3           # Replace with the RU MAC address.
+      du_mac_addr: c8:4b:d6:9d:5b:1f           # Replace with the MAC address of the DU interface.
       vlan_tag_cp: 5
       vlan_tag_up: 5
       prach_port_id: [4]
@@ -46,7 +45,7 @@ ru_ofh:
       ul_port_id: [0]
 
 cell_cfg:
-  dl_arfcn: 634548
+  dl_arfcn: 637212
   band: 78
   channel_bandwidth_MHz: 20
   common_scs: 30

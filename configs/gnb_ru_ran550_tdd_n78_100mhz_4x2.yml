@@ -4,7 +4,7 @@
 
 cu_cp:
   amf:
-    addr: 127.0.1.100
+    addr: 127.0.0.5
     port: 38412
     bind_addr: 127.0.0.1
     supported_tracking_areas:
@@ -34,9 +34,9 @@ ru_ofh:
   enable_dl_static_compr_hdr: true
   iq_scaling: 5.5
   cells:
-    - network_interface: enp1s0f0
-      ru_mac_addr: 70:b3:d5:e1:5b:06
-      du_mac_addr: 80:61:5f:0d:df:aa
+    - network_interface: eno8403np1
+      ru_mac_addr: 8c:1f:64:d1:13:d3           # Replace with the RU MAC address.
+      du_mac_addr: c8:4b:d6:9d:5b:1f           # Replace with the MAC address of the DU interface.
       vlan_tag_cp: 5
       vlan_tag_up: 5
       prach_port_id: [4, 5]

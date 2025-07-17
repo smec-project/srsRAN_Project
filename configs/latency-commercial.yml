@@ -15,18 +15,18 @@ cell_cfg:
   pusch:
     min_k2: 4
   pucch:
-    sr_period_ms: 5
+    sr_period_ms: 10
     min_k1: 4
   mac_cell_group:
     bsr_cfg:
-      periodic_bsr_timer: 5
-      retx_bsr_timer: 10
-  # tdd_ul_dl_cfg:
-  #   dl_ul_tx_period: 5    
-  #   nof_dl_slots: 3
-  #   nof_dl_symbols: 6
-  #   nof_ul_slots: 1
-  #   nof_ul_symbols: 4 
+      periodic_bsr_timer: 20
+      retx_bsr_timer: 320
+  tdd_ul_dl_cfg:
+    dl_ul_tx_period: 5    
+    nof_dl_slots: 3
+    nof_dl_symbols: 10
+    nof_ul_slots: 1
+    nof_ul_symbols: 2
     # pattern2:
     #   dl_ul_tx_period: 10                       # Optional INT (10). Sets the TDD pattern periodicity in slots. The combination of this value and the chosen numerology must lead to a TDD periodicity of 0.5, 0.625, 1, 1.25, 2, 2.5, 3, 4, 5 or 10 milliseconds. Supported: [2 - 80].
     #   nof_dl_slots: 6                           # Optional INT (6). Number of consecutive full Downlink slots. Supported: [0-80].
@@ -35,10 +35,10 @@ cell_cfg:
     #   nof_ul_symbols: 0                         # Optional INT (0). Number of Uplink symbols at the end of the slot preceding the first full Uplink slot. Supported: [0-13].
 
 # Balance between energy and throughput (20-30Mbps, 32-20Mbps, max-60mbps)
-  # drx: 
-  #   on_duration_timer: 10                   # Optional UINT (10). Sets the minimum duration in milliseconds that the UE stays in active mode, when DRX is configured. Supported: [1, 2, 3, 4, 5, 6, 8, 10, 20, 30, 40, 50, 60, 80, 100, 200, 300, 400, 500, 600, 800, 1000, 1200, 1600]. 
-  #   inactivity_timer: 0                     # Optional UINT (0). Sets the duration in milliseconds that the UE stays active after PDCCH reception, when DRX is configured. Supported: [0, 1, 2, 3, 4, 5, 6, 8, 10, 20, 30, 40, 50, 60, 80, 100, 200, 300, 500, 750, 1280, 1920, 2560].
-  #   long_cycle: 40                           # Optional UINT (0). Sets the duration in milliseconds between UE DRX long cycles. The value 0 is used to disable DRX. Supported: [10, 20, 32, 40, 60, 64, 70, 80, 128, 160, 256, 320, 512, 640, 1024, 1280, 2048, 2560, 5120, 10240] OR [0]. 
+  drx: 
+    on_duration_timer: 4                   # Optional UINT (10). Sets the minimum duration in milliseconds that the UE stays in active mode, when DRX is configured. Supported: [1, 2, 3, 4, 5, 6, 8, 10, 20, 30, 40, 50, 60, 80, 100, 200, 300, 400, 500, 600, 800, 1000, 1200, 1600]. 
+    inactivity_timer: 40                     # Optional UINT (0). Sets the duration in milliseconds that the UE stays active after PDCCH reception, when DRX is configured. Supported: [0, 1, 2, 3, 4, 5, 6, 8, 10, 20, 30, 40, 50, 60, 80, 100, 200, 300, 500, 750, 1280, 1920, 2560].
+    long_cycle: 160                           # Optional UINT (0). Sets the duration in milliseconds between UE DRX long cycles. The value 0 is used to disable DRX. Supported: [10, 20, 32, 40, 60, 64, 70, 80, 128, 160, 256, 320, 512, 640, 1024, 1280, 2048, 2560, 5120, 10240] OR [0]. 
   # ul_common:
   #   p_max:                                 # Optional TEXT. Sets maximum transmit power allowed in this serving cell. Supported: [-30 - +23].
 
