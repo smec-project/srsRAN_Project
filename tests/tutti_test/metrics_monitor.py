@@ -16,7 +16,8 @@ class MetricsMonitor:
             self.sock.connect((self.server_ip, self.server_port))
             self.connected = True
             print(
-                f"Connected to metrics server at {self.server_ip}:{self.server_port}"
+                "Connected to metrics server at"
+                f" {self.server_ip}:{self.server_port}"
             )
             return True
         except Exception as e:
@@ -70,7 +71,8 @@ def monitor_metrics():
             if metrics:
                 for ue_idx, values in metrics.items():
                     print(
-                        f"{ue_idx:6} | {values['RNTI']:8} | {values['PRBs']:4} | {values['SLOT']}"
+                        f"{ue_idx:6} | {values['RNTI']:8} |"
+                        f" {values['PRBs']:4} | {values['SLOT']}"
                     )
 
     except KeyboardInterrupt:

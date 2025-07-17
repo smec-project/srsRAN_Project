@@ -13,15 +13,11 @@ import random
 
 
 def extract_window_features(events, window_bsr_indices, window_size=1):
-    """
-    Extract features for a window between BSRs using slot-based timing
-    Events array format:
-    [0]: Event type (SR=0, BSR=1, PRB=2)
-    [1]: BSR bytes
-    [2]: PRBs
-    [3]: Timestamps
-    [4]: Slots
-    [5]: Label
+    """Extract features for a window between BSRs using slot-based timing Events
+    array format:
+
+    [0]: Event type (SR=0, BSR=1, PRB=2) [1]: BSR bytes [2]: PRBs [3]:
+    Timestamps [4]: Slots [5]: Label
     """
     all_features = []
 
@@ -103,12 +99,11 @@ def extract_window_features(events, window_bsr_indices, window_size=1):
 
 
 def prepare_training_data(labeled_data, window_size=1, feature_indices=None):
-    """
-    Prepare window-based features from labeled data
-    Args:
-        labeled_data: dictionary of RNTI to events
-        window_size: number of BSR intervals to include in each window
-        feature_indices: indices of features to use for each interval (0-8)
+    """Prepare window-based features from labeled data Args:
+
+    labeled_data: dictionary of RNTI to events window_size: number of BSR
+    intervals to include in each window feature_indices: indices of features to
+    use for each interval (0-8)
     """
     features = []
     labels = []
@@ -144,7 +139,7 @@ def evaluate_per_rnti(
     model, scaler, val_data, model_name, feature_indices, window_size=1
 ):
     """
-    Evaluate model performance for each RNTI separately
+    Evaluate model performance for each RNTI separately.
     """
     print(f"\nPer-RNTI Evaluation for {model_name}:")
 
@@ -186,8 +181,8 @@ def evaluate_per_rnti(
 
 def combine_data(data_files):
     """
-    Combine multiple .npy files into one dataset
-    Each RNTI will be prefixed with its source file name to avoid conflicts
+    Combine multiple .npy files into one dataset Each RNTI will be prefixed with
+    its source file name to avoid conflicts.
     """
     combined_data = {}
     for file in data_files:
@@ -212,7 +207,7 @@ def train_and_evaluate(
     window_size=1,
 ):
     """
-    Train and evaluate the model using selected features
+    Train and evaluate the model using selected features.
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -364,13 +359,10 @@ def train_and_evaluate(
 
 
 def find_all_data_files(label_type, base_dir="labeled_data"):
-    """
-    Find all files with specified label type in base directory
-    Args:
-        label_type: 'bsr_only' or 'first_bsr'
-        base_dir: base directory to search in
-    Returns:
-        list of file paths
+    """Find all files with specified label type in base directory Args:
+
+    label_type: 'bsr_only' or 'first_bsr'     base_dir: base directory to search
+    in Returns:     list of file paths
     """
     pattern = os.path.join(base_dir, "**", f"*_{label_type}.npy")
     files = glob.glob(pattern, recursive=True)
@@ -385,7 +377,7 @@ def auto_train_and_evaluate(
     output_dir, feature_indices, seed=42, label_type="bsr_only", window_size=1
 ):
     """
-    Automatically load all data files, extract features, split and train
+    Automatically load all data files, extract features, split and train.
     """
     print("\nAuto mode: Finding all data files...")
     all_files = find_all_data_files(label_type)
@@ -577,10 +569,9 @@ def auto_train_and_evaluate(
 
 
 def check_file_label_type(file_path, expected_label_type):
-    """
-    Check if the file name matches the expected label type
-    Returns:
-        bool: True if matches, False otherwise
+    """Check if the file name matches the expected label type Returns:
+
+    bool: True if matches, False otherwise
     """
     # Get the base name of the file and check if it ends with expected label type
     base_name = os.path.basename(file_path)
@@ -590,10 +581,9 @@ def check_file_label_type(file_path, expected_label_type):
 def evaluate_and_record_predictions(
     model, scaler, val_data, model_name, feature_indices, window_size=1
 ):
-    """
-    Evaluate model and record predictions for each BSR
-    Returns:
-        dict: Dictionary mapping RNTI to list of predicted labels
+    """Evaluate model and record predictions for each BSR Returns:
+
+    dict: Dictionary mapping RNTI to list of predicted labels
     """
     bsr_predictions = {}  # Dict to store BSR predictions for each RNTI
 
@@ -639,12 +629,11 @@ def evaluate_and_record_predictions(
 
 
 def print_events_with_predictions(full_events_path, predictions, window_size):
-    """
-    Print full events data with predictions
-    Args:
-        full_events_path: Path to full events data file
-        predictions: Dictionary mapping RNTI to list of predicted labels
-        window_size: Window size used for predictions
+    """Print full events data with predictions Args:
+
+    full_events_path: Path to full events data file predictions: Dictionary
+    mapping RNTI to list of predicted labels window_size: Window size used for
+    predictions
     """
     # Load full events data
     full_events = np.load(full_events_path, allow_pickle=True).item()
@@ -677,7 +666,8 @@ def print_events_with_predictions(full_events_path, predictions, window_size):
 
         print("\nAll events details:")
         print(
-            "Type      | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) | ReqSeq | BSR_Label | Predicted"
+            "Type      | Timestamp(ms) | BSR bytes | PRBs | TimeDiff(ms) |"
+            " ReqSeq | BSR_Label | Predicted"
         )
 
         # Get predictions for this RNTI
@@ -709,15 +699,16 @@ def print_events_with_predictions(full_events_path, predictions, window_size):
                 bsr_count += 1
 
             print(
-                f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | "
-                f"{event[4]:11.2f} | {req_seq_str:6} | {bsr_label:9} | {pred_str:9}"
+                f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} |"
+                f" {event[2]:4.0f} | {event[4]:11.2f} | {req_seq_str:6} |"
+                f" {bsr_label:9} | {pred_str:9}"
             )
         print("-" * 90)
 
 
 def print_mismatched_predictions(full_events_path, predictions, window_size):
     """
-    Print BSRs where predictions don't match the labels
+    Print BSRs where predictions don't match the labels.
     """
     # Load full events data
     full_events = np.load(full_events_path, allow_pickle=True).item()
@@ -743,7 +734,8 @@ def print_mismatched_predictions(full_events_path, predictions, window_size):
                     # Check if prediction doesn't match label
                     if true_label != pred_label:
                         print(
-                            f"{rnti:4} | {event[3]:9.2f} | {true_label:9d} | {pred_label:10d}"
+                            f"{rnti:4} | {event[3]:9.2f} | {true_label:9d} |"
+                            f" {pred_label:10d}"
                         )
 
                     pred_idx += 1
@@ -774,10 +766,12 @@ def main():
         "--features",
         type=str,
         default="0,1,2,3,4,5,6,7,8",
-        help="Comma-separated list of feature indices to use (0-8). Features are: "
-        "0:BSR Difference, 1:Total PRBs, 2:SR Count, 3:End BSR, "
-        "4:BSR per PRB, 5:Window Duration, 6:BSR Update Rate, "
-        "7:SR Rate, 8:Time Until PRB",
+        help=(
+            "Comma-separated list of feature indices to use (0-8). Features"
+            " are: 0:BSR Difference, 1:Total PRBs, 2:SR Count, 3:End BSR, 4:BSR"
+            " per PRB, 5:Window Duration, 6:BSR Update Rate, 7:SR Rate, 8:Time"
+            " Until PRB"
+        ),
     )
     parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for train-val split"
@@ -868,7 +862,8 @@ def main():
 
         if args.val and not check_file_label_type(args.val, args.label_type):
             print(
-                f"Error: Validation file does not match label type '{args.label_type}'"
+                "Error: Validation file does not match label type"
+                f" '{args.label_type}'"
             )
             print(f"File: {args.val}")
             return
@@ -882,7 +877,8 @@ def main():
             ]
             if mismatched_files:
                 print(
-                    f"Error: Some training files do not match label type '{args.label_type}':"
+                    "Error: Some training files do not match label type"
+                    f" '{args.label_type}':"
                 )
                 for f in mismatched_files:
                     print(f"  {f}")
@@ -915,7 +911,8 @@ def main():
                 return
 
             print(
-                f"\nAuto-train mode with specified validation - Using {args.label_type} data"
+                "\nAuto-train mode with specified validation - Using"
+                f" {args.label_type} data"
             )
             print("Training files:")
             for f in train_files:

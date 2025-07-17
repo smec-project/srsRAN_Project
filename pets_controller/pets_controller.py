@@ -150,7 +150,9 @@ class PetsController:
         self.global_base_slot = None  # Will be set by first event
 
     def start(self):
-        """Start the controller and all its connections"""
+        """
+        Start the controller and all its connections.
+        """
         self.running = True
 
         # Connect to RAN services
@@ -176,11 +178,11 @@ class PetsController:
         return True
 
     def _update_priorities(self):
-        """
-        Update priorities based on the oldest request's remaining time
-        - Priority increases as remaining time decreases
-        - Reset priority when no requests pending
-        - Skip priority updates for requests with latency requirements > 3s
+        """Update priorities based on the oldest request's remaining time.
+
+        - Priority increases as remaining time decreases - Reset priority when
+        no requests pending - Skip priority updates for requests with latency
+        requirements > 3s
         """
         while self.running:
             try:
@@ -210,8 +212,9 @@ class PetsController:
                             self.set_priority(rnti, priority)
                             self.ue_priorities[rnti] = priority
                             self.log(
-                                f"Updated priority for RNTI {rnti}: Priority={priority:.2f}, "
-                                f"Remaining_time={current_remaining:.2f}ms"
+                                f"Updated priority for RNTI {rnti}:"
+                                f" Priority={priority:.2f},"
+                                f" Remaining_time={current_remaining:.2f}ms"
                             )
                     else:
                         # Reset priority if not already reset
@@ -227,7 +230,9 @@ class PetsController:
             time.sleep(0.001)  # 1ms interval
 
     def _handle_app_connections(self):
-        """Handle incoming application connections and messages"""
+        """
+        Handle incoming application connections and messages.
+        """
         while self.running:
             try:
                 conn, addr = self.app_socket.accept()
@@ -242,7 +247,9 @@ class PetsController:
                 self.log(f"Error accepting application connection: {e}")
 
     def _handle_app_messages(self, conn: socket.socket, addr):
-        """Handle messages from a specific application connection"""
+        """
+        Handle messages from a specific application connection.
+        """
         try:
             # First message should be app registration with app_id
             data = conn.recv(1024)
@@ -275,8 +282,9 @@ class PetsController:
                         }
                         self.request_sequences[rnti] = []
                         self.log(
-                            f"New UE registered - RNTI: {rnti}, UE_IDX: {ue_idx}, "
-                            f"Latency Req: {latency_req}ms, Size: {request_size} bytes"
+                            f"New UE registered - RNTI: {rnti}, UE_IDX:"
+                            f" {ue_idx}, Latency Req: {latency_req}ms, Size:"
+                            f" {request_size} bytes"
                         )
 
                         self.request_start_times[rnti] = {}
@@ -286,7 +294,8 @@ class PetsController:
                         _, rnti, seq_num = msg_parts
                         current_time = time.time()
                         self.log(
-                            f"Request {seq_num} from RNTI {rnti} start at {current_time}"
+                            f"Request {seq_num} from RNTI {rnti} start at"
+                            f" {current_time}"
                         )
 
                     elif msg_type == "REQUEST":
@@ -322,7 +331,8 @@ class PetsController:
                                 time.time() - start_time
                             ) * 1000  # Convert to ms
                             self.log(
-                                f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms at {time.time()}"
+                                f"Request {seq_num} from RNTI {rnti} completed"
+                                f" in {elapsed_time_ms:.2f}ms at {time.time()}"
                             )
                             del self.request_start_times[rnti][seq_num]
 
@@ -336,7 +346,9 @@ class PetsController:
             conn.close()
 
     def _handle_ran_metrics(self):
-        """Receive and process RAN metrics"""
+        """
+        Receive and process RAN metrics.
+        """
         while self.running:
             try:
                 data = self.ran_metrics_socket.recv(1024).decode("utf-8")
@@ -358,7 +370,9 @@ class PetsController:
                 self.log(f"Error receiving RAN metrics: {e}")
 
     def set_priority(self, rnti: str, priority: float):
-        """Send priority update to RAN"""
+        """
+        Send priority update to RAN.
+        """
         try:
             # Format RNTI string and pack message in the correct format
             rnti_str = f"{rnti:<4}".encode(
@@ -373,7 +387,9 @@ class PetsController:
             return False
 
     def reset_priority(self, rnti: str):
-        """Reset priority for a specific RNTI"""
+        """
+        Reset priority for a specific RNTI.
+        """
         try:
             # Reset priority state
             if rnti in self.ue_priorities:
@@ -389,7 +405,9 @@ class PetsController:
             return False
 
     def stop(self):
-        """Stop the controller and clean up connections"""
+        """
+        Stop the controller and clean up connections.
+        """
         self.running = False
 
         # Close all application connections
@@ -424,13 +442,15 @@ class PetsController:
             self.log_file.close()
 
     def _initialize_ue_priority(self, rnti: str):
-        """Initialize priority for a new UE"""
+        """
+        Initialize priority for a new UE.
+        """
         self.ue_priorities[rnti] = 0.0
 
     def normalize_slot(self, rnti: str, slot: int, event_type: str) -> int:
         """
         Convert cyclic slots (0-20480) into a continuous increasing sequence
-        relative to the global base slot
+        relative to the global base slot.
         """
         SLOT_MAX = 20480
 
@@ -480,8 +500,8 @@ class PetsController:
         self, rnti: str, event_type: str, timestamp: float, slot: int, **values
     ):
         """
-        Add an event to the window and update if necessary
-        Event format: [type, bytes, prbs, timestamp, slot, label]
+        Add an event to the window and update if necessary Event format: [type,
+        bytes, prbs, timestamp, slot, label]
         """
         if rnti not in self.window_events:
             self.window_events[rnti] = []
@@ -541,7 +561,7 @@ class PetsController:
 
     def print_window_data(self, rnti: str):
         """
-        Print all events in the current window for a specific RNTI
+        Print all events in the current window for a specific RNTI.
         """
         if not self.window_events.get(rnti):
             return
@@ -561,15 +581,16 @@ class PetsController:
             label = event[5]
 
             print(
-                f"{event_type:4} | {timestamp_ms:11.2f} | {bsr_bytes:9.0f} | {prbs:4.0f} | {slot:4.0f} | {label:5.0f}"
+                f"{event_type:4} | {timestamp_ms:11.2f} | {bsr_bytes:9.0f} |"
+                f" {prbs:4.0f} | {slot:4.0f} | {label:5.0f}"
             )
 
         print("-" * 60)
 
     def extract_window_features(self, events, window_bsr_indices):
         """
-        Extract features for a window between BSRs
-        Returns features in the same order as training
+        Extract features for a window between BSRs Returns features in the same
+        order as training.
         """
         all_features = []
 
@@ -648,7 +669,9 @@ class PetsController:
         return np.concatenate(all_features)
 
     def update_window(self, rnti: str):
-        """Update the sliding window when a new BSR event arrives"""
+        """
+        Update the sliding window when a new BSR event arrives.
+        """
         # Find all BSR indices in current events
         bsr_indices = [
             i
@@ -755,18 +778,31 @@ class PetsController:
                         )  # Use timestamp as request ID
 
                     # Log prediction and all remaining times
-                    log_msg = f"Prediction for RNTI {rnti}: {prediction} at {time.time()}, "
-                    log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
-                    log_msg += f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}"
+                    log_msg = (
+                        f"Prediction for RNTI {rnti}: {prediction} at"
+                        f" {time.time()}, "
+                    )
+                    log_msg += (
+                        f"Model_pred={model_prediction},"
+                        f" bsr_increased={bsr_increased}, "
+                    )
+                    log_msg += (
+                        "Total positive predictions:"
+                        f" {self.positive_predictions.get(rnti, 0)}"
+                    )
                     if rnti in self.ue_remaining_times:
                         for req_label, remaining in self.ue_remaining_times[
                             rnti
                         ]:
-                            log_msg += f", Request_{req_label}_remaining={remaining:.2f}ms"
+                            log_msg += (
+                                f", Request_{req_label}_remaining={remaining:.2f}ms"
+                            )
                     self.log(log_msg)
 
     def _handle_sr_metrics(self, values):
-        """Handle SR indication metrics"""
+        """
+        Handle SR indication metrics.
+        """
         rnti = values["RNTI"][-4:]
         slot = int(values["SLOT"])
         self.log(
@@ -775,7 +811,9 @@ class PetsController:
         self.add_event(rnti, "SR", time.time(), slot)
 
     def _handle_bsr_metrics(self, values):
-        """Handle BSR metrics"""
+        """
+        Handle BSR metrics.
+        """
         rnti = values["RNTI"][-4:]
         slot = int(values["SLOT"])
         bytes_val = int(values["BYTES"])
@@ -791,22 +829,28 @@ class PetsController:
         self.ue_bsr_events[rnti].append((bytes_val, slot))
 
         self.log(
-            f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes_val} at {time.time()}"
+            f"bsr received from RNTI=0x{rnti}, slot={slot},"
+            f" bytes={bytes_val} at {time.time()}"
         )
         self.add_event(rnti, "BSR", time.time(), slot, bytes=bytes_val)
 
     def _handle_prb_metrics(self, values):
-        """Handle PRB allocation metrics"""
+        """
+        Handle PRB allocation metrics.
+        """
         rnti = values["RNTI"][-4:]
         slot = int(values["SLOT"])
         prbs = int(values["PRBs"])
         self.log(
-            f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at {time.time()}"
+            f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at"
+            f" {time.time()}"
         )
         self.add_event(rnti, "PRB", time.time(), slot, prbs=prbs)
 
     def log(self, message: str):
-        """Helper method for logging"""
+        """
+        Helper method for logging.
+        """
         if self.enable_logging and self.log_file:
             self.log_file.write(message + "\n")
             self.log_file.flush()
@@ -830,13 +874,19 @@ def main():
         "--model-path",
         type=str,
         default="labeled_data/models/bsr_only_xgboost.joblib",
-        help="Path to the trained model for inference (default: labeled_data/bsr_only_xgboost.joblib)",
+        help=(
+            "Path to the trained model for inference (default:"
+            " labeled_data/bsr_only_xgboost.joblib)"
+        ),
     )
     parser.add_argument(
         "--scaler-path",
         type=str,
         default="labeled_data/models/bsr_only_scaler.joblib",
-        help="Path to the scaler for the model (default: labeled_data/bsr_only_scaler.joblib)",
+        help=(
+            "Path to the scaler for the model (default:"
+            " labeled_data/bsr_only_scaler.joblib)"
+        ),
     )
     args = parser.parse_args()
 

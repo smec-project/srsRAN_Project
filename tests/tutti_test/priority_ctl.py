@@ -49,7 +49,8 @@ class PriorityController:
         try:
             bytes_sent = self.sock.send(msg)
             print(
-                f"Set RNTI {rnti} priority to {priority} (sent {bytes_sent} bytes)"
+                f"Set RNTI {rnti} priority to {priority} (sent"
+                f" {bytes_sent} bytes)"
             )
             return True
         except Exception as e:

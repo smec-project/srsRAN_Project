@@ -106,7 +106,9 @@ class TuttiController:
         self.rnti_to_ue_idx = {}  # RNTI -> UE_IDX
 
     def start(self):
-        """Start the controller and all its connections"""
+        """
+        Start the controller and all its connections.
+        """
         self.running = True
 
         # Connect to RAN services
@@ -129,7 +131,9 @@ class TuttiController:
         return True
 
     def _handle_app_connections(self):
-        """Handle incoming application connections and messages"""
+        """
+        Handle incoming application connections and messages.
+        """
         while self.running:
             try:
                 conn, addr = self.app_socket.accept()
@@ -148,7 +152,9 @@ class TuttiController:
                 self.log_file.flush()
 
     def _handle_app_messages(self, conn: socket.socket, addr):
-        """Handle messages from a specific application connection"""
+        """
+        Handle messages from a specific application connection.
+        """
         try:
             # First message should be app registration with app_id
             data = conn.recv(1024)
@@ -184,8 +190,9 @@ class TuttiController:
                         }
                         self.request_sequences[rnti] = []
                         self.log_file.write(
-                            f"New UE registered - RNTI: {rnti}, UE_IDX: {ue_idx}, "
-                            f"Latency Req: {latency_req}ms, Size: {request_size} bytes\n"
+                            f"New UE registered - RNTI: {rnti}, UE_IDX:"
+                            f" {ue_idx}, Latency Req: {latency_req}ms, Size:"
+                            f" {request_size} bytes\n"
                         )
                         self.log_file.flush()
                         # Initialize resource tracking for new UE
@@ -198,7 +205,8 @@ class TuttiController:
                         _, rnti, seq_num = msg_parts
                         current_time = time.time()
                         self.log_file.write(
-                            f"Request {seq_num} from RNTI {rnti} start at {current_time}\n"
+                            f"Request {seq_num} from RNTI {rnti} start at"
+                            f" {current_time}\n"
                         )
                         self.log_file.flush()
 
@@ -244,7 +252,9 @@ class TuttiController:
                                 time.time() - start_time
                             ) * 1000  # Convert to ms
                             self.log_file.write(
-                                f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n"
+                                f"Request {seq_num} from RNTI {rnti} completed"
+                                f" in {elapsed_time_ms:.2f}ms at"
+                                f" {time.time()}\n"
                             )
                             self.log_file.flush()
                             del self.request_start_times[rnti][seq_num]
@@ -282,7 +292,9 @@ class TuttiController:
             conn.close()
 
     def _handle_ran_metrics(self):
-        """Receive and process RAN metrics"""
+        """
+        Receive and process RAN metrics.
+        """
         while self.running:
             try:
                 data = self.ran_metrics_socket.recv(1024).decode("utf-8")
@@ -305,7 +317,9 @@ class TuttiController:
                 self.log_file.flush()
 
     def set_priority(self, rnti: str, priority: float):
-        """Send priority update to RAN"""
+        """
+        Send priority update to RAN.
+        """
         try:
             # Format RNTI string and pack message in the correct format
             rnti_str = f"{rnti:<4}".encode(
@@ -321,7 +335,9 @@ class TuttiController:
             return False
 
     def reset_priority(self, rnti: str):
-        """Reset priority for a specific RNTI"""
+        """
+        Reset priority for a specific RNTI.
+        """
         try:
             # Reset priority state
             if rnti in self.ue_priorities:
@@ -338,7 +354,9 @@ class TuttiController:
             return False
 
     def stop(self):
-        """Stop the controller and clean up connections"""
+        """
+        Stop the controller and clean up connections.
+        """
         self.running = False
 
         # Close all application connections
@@ -369,11 +387,16 @@ class TuttiController:
             pass
 
     def _initialize_ue_priority(self, rnti: str):
-        """Initialize priority for a new UE"""
+        """
+        Initialize priority for a new UE.
+        """
         self.ue_priorities[rnti] = 0.0
 
     def _calculate_incentive_priority(self, ue_rnti: str) -> float:
-        """Calculate priority for incentive mode (first half of latency requirement)"""
+        """
+        Calculate priority for incentive mode (first half of latency
+        requirement)
+        """
         # Constants
         BYTES_PER_PRB = 90
         TTI_DURATION = 2.5  # ms
@@ -441,7 +464,10 @@ class TuttiController:
         return current_offset
 
     def _calculate_accelerate_priority(self, ue_rnti: str) -> float:
-        """Calculate priority for accelerate mode (second half of latency requirement)"""
+        """
+        Calculate priority for accelerate mode (second half of latency
+        requirement)
+        """
         # Constants
         BYTES_PER_PRB = 90
         MS_TO_S = 0.001  # Convert ms to s
@@ -486,7 +512,9 @@ class TuttiController:
         return priority
 
     def _update_priorities(self):
-        """Update priorities based on request timers and latency requirements"""
+        """
+        Update priorities based on request timers and latency requirements.
+        """
         self.log_file.write("Priority update thread started\n")
         self.log_file.flush()
         while self.running:
@@ -540,7 +568,10 @@ class TuttiController:
                 self.log_file.flush()
 
     def _update_prb_history(self, rnti: str, slot: int, prbs: int):
-        """Update PRB history and track PRB allocations for earliest active request"""
+        """
+        Update PRB history and track PRB allocations for earliest active
+        request.
+        """
         # Initialize history for new UE if needed
         if rnti not in self.prb_history:
             self.prb_history[rnti] = {}
@@ -583,7 +614,9 @@ class TuttiController:
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
 
     def _handle_prb_metrics(self, values):
-        """Handle PRB allocation metrics"""
+        """
+        Handle PRB allocation metrics.
+        """
         # Keep RNTI as string
         rnti = values["RNTI"][-4:]  # Just take last 4 chars
         ue_idx = values["UE_IDX"]
@@ -604,7 +637,8 @@ class TuttiController:
         # Update latest PRB allocation and slot
         self.ue_prb_status[rnti] = (slot, prbs)
         self.log_file.write(
-            f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at {time.time()}\n"
+            f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at"
+            f" {time.time()}\n"
         )
         self.log_file.flush()
 
@@ -612,7 +646,9 @@ class TuttiController:
         self._update_prb_history(rnti, slot, prbs)
 
     def _handle_sr_metrics(self, values):
-        """Handle SR indication metrics"""
+        """
+        Handle SR indication metrics.
+        """
         rnti = values["RNTI"][-4:]  # Just take last 4 chars
         slot = int(values["SLOT"])
         self.log_file.write(
@@ -621,14 +657,17 @@ class TuttiController:
         self.log_file.flush()
 
     def _handle_bsr_metrics(self, values):
-        """Handle BSR metrics"""
+        """
+        Handle BSR metrics.
+        """
         rnti = values["RNTI"][-4:]  # Just take last 4 chars
         ue_idx = values["UE_IDX"]
         bytes = int(values["BYTES"])
         slot = int(values["SLOT"])
 
         self.log_file.write(
-            f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at {time.time()}\n"
+            f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at"
+            f" {time.time()}\n"
         )
         self.log_file.flush()
 
@@ -639,7 +678,9 @@ class TuttiController:
         )
 
     def __del__(self):
-        """Ensure sockets are closed when object is destroyed"""
+        """
+        Ensure sockets are closed when object is destroyed.
+        """
         self.stop()
 
 

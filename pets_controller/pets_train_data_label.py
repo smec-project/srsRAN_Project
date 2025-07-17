@@ -64,7 +64,7 @@ class TrainDataLabeler:
 
     def parse_log_file(self, filename):
         """
-        Parse the log file and extract all events including request start/end
+        Parse the log file and extract all events including request start/end.
         """
         request_start_seq = {}
         request_end_seq = {}
@@ -160,10 +160,9 @@ class TrainDataLabeler:
         }
 
     def add_event(self, rnti, timestamp, event_type, value=None):
-        """
-        Add an event to the events dictionary
-        Returns:
-            dict: The added event data
+        """Add an event to the events dictionary Returns:
+
+        dict: The added event data
         """
         if rnti not in self.events:
             self.events[rnti] = []
@@ -178,9 +177,9 @@ class TrainDataLabeler:
         return event_data
 
     def quantize_event(self, event, is_new_request=0, base_time=0):
-        """
-        Quantize a single event into the required format with label
-        Returns: [type, bytes, prbs, timestamp, slot, is_new_request]
+        """Quantize a single event into the required format with label Returns:
+
+        [type, bytes, prbs, timestamp, slot, is_new_request]
         """
         event_type = event["type"]
         quantized = np.zeros(6, dtype=np.float32)
@@ -205,8 +204,8 @@ class TrainDataLabeler:
 
     def normalize_slots(self, events):
         """
-        Convert cyclic slots (0-20480) into a continuous increasing sequence
-        and make them relative to the first event
+        Convert cyclic slots (0-20480) into a continuous increasing sequence and
+        make them relative to the first event.
         """
         SLOT_MAX = 20480
         current_cycle = 0
@@ -244,7 +243,7 @@ class TrainDataLabeler:
 
     def sort_events_by_slot(self, events):
         """
-        Sort SR, PRB, BSR events by slot and merge with request events
+        Sort SR, PRB, BSR events by slot and merge with request events.
         """
         # Separate events with and without slots
         slot_events = []
@@ -358,11 +357,10 @@ class TrainDataLabeler:
         return final_events
 
     def analyze_ue_events(self, target_rnti):
-        """
-        Analyze and quantize all events for a specific RNTI
-        Returns:
-            quantized_events: numpy array of quantized events
-            bsr_request_map: dictionary mapping BSR index to request sequence number
+        """Analyze and quantize all events for a specific RNTI Returns:
+
+        quantized_events: numpy array of quantized events bsr_request_map:
+        dictionary mapping BSR index to request sequence number
         """
         if target_rnti not in self.events:
             print(f"No events found for RNTI {target_rnti}")
@@ -554,16 +552,12 @@ class TrainDataLabeler:
         return quantized_events, bsr_request_map
 
     def generate_full_events(self, target_rnti, bsr_request_map):
-        """
-        Generate a dataset containing all events including REQUEST_START/END
+        """Generate a dataset containing all events including REQUEST_START/END
         Returns array with columns:
-            [0]: Event type (SR=0, BSR=1, PRB=2, REQ_START=3, REQ_END=4)
-            [1]: BSR bytes
-            [2]: PRBs
-            [3]: Relative time (ms)
-            [4]: Slot
-            [5]: Request sequence number
-            [6]: BSR label
+
+        [0]: Event type (SR=0, BSR=1, PRB=2, REQ_START=3, REQ_END=4) [1]: BSR
+        bytes [2]: PRBs [3]: Relative time (ms) [4]: Slot [5]: Request sequence
+        number [6]: BSR label
         """
         if target_rnti not in self.events:
             print(f"No events found for RNTI {target_rnti}")
@@ -611,10 +605,11 @@ class TrainDataLabeler:
 
     def analyze_all_ues(self):
         """
-        Analyze events for all UEs and generate both filtered and full datasets
+        Analyze events for all UEs and generate both filtered and full datasets.
         """
         print(
-            f"\nFound {len(self.active_rntis)} RNTIs with requests: {sorted(self.active_rntis)}"
+            f"\nFound {len(self.active_rntis)} RNTIs with requests:"
+            f" {sorted(self.active_rntis)}"
         )
 
         # Normalize slots and sort events for each RNTI
@@ -651,12 +646,10 @@ class TrainDataLabeler:
         return all_ue_data, all_ue_full_data
 
     def get_prev_bsr_value(self, bsr_bytes):
-        """
-        Get the previous BSR value
-        Args:
-            bsr_bytes: Current BSR bytes
-        Returns:
-            int: Previous BSR value in the table
+        """Get the previous BSR value Args:
+
+        bsr_bytes: Current BSR bytes Returns:     int: Previous BSR value in the
+        table
         """
         for i in range(len(self.BSR_VALUES) - 1, -1, -1):
             if bsr_bytes > self.BSR_VALUES[i]:
@@ -664,12 +657,10 @@ class TrainDataLabeler:
         return -1
 
     def get_next_bsr_value(self, bsr_bytes):
-        """
-        Get the next BSR value
-        Args:
-            bsr_bytes: Current BSR bytes
-        Returns:
-            int: Next BSR value in the table
+        """Get the next BSR value Args:
+
+        bsr_bytes: Current BSR bytes Returns:     int: Next BSR value in the
+        table
         """
         for i in range(len(self.BSR_VALUES)):
             if bsr_bytes <= self.BSR_VALUES[i]:
@@ -679,7 +670,7 @@ class TrainDataLabeler:
 
 def print_numpy_data_info(label_type, data):
     """
-    Print information about the labeled numpy data
+    Print information about the labeled numpy data.
     """
     print(f"\n{label_type} Data Analysis:")
     print(f"Number of RNTIs: {len(data)}")
@@ -697,7 +688,8 @@ def print_numpy_data_info(label_type, data):
 
         print(f"Total events: {total_events}")
         print(
-            f"Event distribution: SR={sr_count}, BSR={bsr_count}, PRB={prb_count}"
+            f"Event distribution: SR={sr_count}, BSR={bsr_count},"
+            f" PRB={prb_count}"
         )
         print(f"Labeled events: {labeled_count}")
 
@@ -709,16 +701,17 @@ def print_numpy_data_info(label_type, data):
             )
             label = "1" if event[5] == 1 else "0"
             print(
-                f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:4.0f} | {label:5}"
+                f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} |"
+                f" {event[2]:4.0f} | {event[4]:4.0f} | {label:5}"
             )
         print("-" * 70)
 
 
 def print_full_events_info(data):
-    """
-    Print information about the full events data (including REQUEST events)
+    """Print information about the full events data (including REQUEST events)
     Args:
-        data: dictionary of RNTI to full event arrays
+
+    data: dictionary of RNTI to full event arrays
     """
     print("\nFull Events Data Analysis:")
     print(f"Number of RNTIs: {len(data)}")
@@ -749,7 +742,8 @@ def print_full_events_info(data):
 
         print("\nAll events details:")
         print(
-            "Type      | Timestamp(ms) | BSR bytes | PRBs | Slot      | ReqSeq | BSR_Label"
+            "Type      | Timestamp(ms) | BSR bytes | PRBs | Slot      | ReqSeq"
+            " | BSR_Label"
         )
         for event in ue_data:
             event_type = {
@@ -766,14 +760,16 @@ def print_full_events_info(data):
             bsr_label = str(int(event[6])) + ":bsr" if event[6] > 0 else "0"
 
             print(
-                f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {slot_str:9} | {req_seq_str:6} | {bsr_label:9}"
+                f"{event_type:9} | {event[3]:11.2f} | {event[1]:9.0f} |"
+                f" {event[2]:4.0f} | {slot_str:9} | {req_seq_str:6} |"
+                f" {bsr_label:9}"
             )
         print("-" * 90)
 
 
 def process_single_rnti(rnti, events_dict=None, request_sizes=None):
     """
-    Process a single RNTI's data
+    Process a single RNTI's data.
     """
     labeler = TrainDataLabeler()
     labeler.events = {rnti: events_dict[rnti]}
