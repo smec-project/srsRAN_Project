@@ -15,7 +15,9 @@ class MetricsMonitor:
         try:
             self.sock.connect((self.server_ip, self.server_port))
             self.connected = True
-            print(f"Connected to metrics server at {self.server_ip}:{self.server_port}")
+            print(
+                f"Connected to metrics server at {self.server_ip}:{self.server_port}"
+            )
             return True
         except Exception as e:
             print(f"Connection failed: {e}")
@@ -78,9 +80,15 @@ def monitor_metrics():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Monitor UE scheduling metrics")
-    parser.add_argument("--ip", default="127.0.0.1", help="Metrics server IP address")
-    parser.add_argument("--port", type=int, default=5556, help="Metrics server port")
+    parser = argparse.ArgumentParser(
+        description="Monitor UE scheduling metrics"
+    )
+    parser.add_argument(
+        "--ip", default="127.0.0.1", help="Metrics server IP address"
+    )
+    parser.add_argument(
+        "--port", type=int, default=5556, help="Metrics server port"
+    )
 
     args = parser.parse_args()
 

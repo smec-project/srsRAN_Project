@@ -85,10 +85,14 @@ def get_kpis(
     total_dl_ko_ok = gnb_metrics.total.dl_nof_ok + gnb_metrics.total.dl_nof_ko
 
     kpis.ul_bler_aggregate = (
-        0 if not total_ul_ko_ok else gnb_metrics.total.ul_nof_ko / total_ul_ko_ok
+        0
+        if not total_ul_ko_ok
+        else gnb_metrics.total.ul_nof_ko / total_ul_ko_ok
     )
     kpis.dl_bler_aggregate = (
-        0 if not total_dl_ko_ok else gnb_metrics.total.dl_nof_ko / total_dl_ko_ok
+        0
+        if not total_dl_ko_ok
+        else gnb_metrics.total.dl_nof_ko / total_dl_ko_ok
     )
 
     # UE

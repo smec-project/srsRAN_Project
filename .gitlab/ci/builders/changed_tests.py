@@ -114,7 +114,9 @@ def _main():
             args.output_fingerprint, index=False, header=True, quoting=QUOTE_ALL
         )
     if args.input_fingerprint is not None:
-        old_info_df = pd.read_csv(args.input_fingerprint, header=0, quoting=QUOTE_ALL)
+        old_info_df = pd.read_csv(
+            args.input_fingerprint, header=0, quoting=QUOTE_ALL
+        )
         full_info_df = all_info_df.merge(
             old_info_df, how="left", on="filename", suffixes=("", "_old")
         )
@@ -130,11 +132,17 @@ def _main():
             ]
         ctest_dict = _get_ctests(args.build_dir)
         ctest_df = _ctest_dict_to_df(ctest_dict)
-        modified_ctest_df = ctest_df.merge(full_info_df, how="inner", on="filename")
+        modified_ctest_df = ctest_df.merge(
+            full_info_df, how="inner", on="filename"
+        )
         if args.names:
-            output = "\n".join([str(num) for num in modified_ctest_df["name"].values])
+            output = "\n".join(
+                [str(num) for num in modified_ctest_df["name"].values]
+            )
         else:
-            output = ",".join([str(num) for num in modified_ctest_df["number"].values])
+            output = ",".join(
+                [str(num) for num in modified_ctest_df["number"].values]
+            )
         print(output)
 
 

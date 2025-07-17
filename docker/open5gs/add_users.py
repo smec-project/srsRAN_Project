@@ -101,7 +101,9 @@ def read_from_db(db_file):
             pass
         else:
             try:
-                name, imsi, key, op_type, op_c, amf, qci, ip_alloc = line.split(",")
+                name, imsi, key, op_type, op_c, amf, qci, ip_alloc = line.split(
+                    ","
+                )
             except ValueError as e:
                 print(f"Error reading subscriber_db.csv: {e}")
                 return None
@@ -169,7 +171,9 @@ def read_from_string(sub_data):
     help="IP address or hostname of the mongodb instance.",
 )
 @click.option(
-    "--mongodb_port", default=27017, help="Port to connect to the mongodb instance."
+    "--mongodb_port",
+    default=27017,
+    help="Port to connect to the mongodb instance.",
 )
 @click.option(
     "--subscriber_data",

@@ -37,7 +37,9 @@ def extract_window_features(events, window_bsr_indices, window_size=1):
         end_bsr = events[current_end_idx]
 
         # Find first PRB after start_bsr but before final_bsr using slots
-        first_prb_slot = final_bsr_slot  # Default to final BSR slot if no PRB found
+        first_prb_slot = (
+            final_bsr_slot  # Default to final BSR slot if no PRB found
+        )
         search_idx = current_start_idx + 1
         while search_idx < len(events):
             if events[search_idx][0] == 2:  # PRB event
@@ -202,7 +204,12 @@ def combine_data(data_files):
 
 
 def train_and_evaluate(
-    train_files, val_file, output_dir, label_type, feature_indices, window_size=1
+    train_files,
+    val_file,
+    output_dir,
+    label_type,
+    feature_indices,
+    window_size=1,
 ):
     """
     Train and evaluate the model using selected features
@@ -215,7 +222,9 @@ def train_and_evaluate(
     val_data = np.load(val_file, allow_pickle=True).item()
 
     # Prepare data with feature selection
-    X_train, y_train = prepare_training_data(train_data, window_size, feature_indices)
+    X_train, y_train = prepare_training_data(
+        train_data, window_size, feature_indices
+    )
     X_val, y_val = prepare_training_data(val_data, window_size, feature_indices)
 
     # All feature names for one interval
@@ -235,7 +244,9 @@ def train_and_evaluate(
     selected_feature_names = [base_feature_names[i] for i in feature_indices]
     all_feature_names = []
     for i in range(window_size):
-        interval_names = [f"Interval_{i+1}_{name}" for name in selected_feature_names]
+        interval_names = [
+            f"Interval_{i+1}_{name}" for name in selected_feature_names
+        ]
         all_feature_names.extend(interval_names)
 
     feature_names = all_feature_names  # All names are already selected
@@ -322,7 +333,9 @@ def train_and_evaluate(
         )
 
         # Save model and scaler
-        model_path = os.path.join(output_dir, f"{label_type}_{model_name}.joblib")
+        model_path = os.path.join(
+            output_dir, f"{label_type}_{model_name}.joblib"
+        )
         scaler_path = os.path.join(output_dir, f"{label_type}_scaler.joblib")
         joblib.dump(model, model_path)
         joblib.dump(scaler, scaler_path)
@@ -333,7 +346,9 @@ def train_and_evaluate(
         print("\nFeature Importance Ranking:")
         importances = model.feature_importances_
         importance_pairs = list(zip(feature_names, importances))
-        importance_pairs.sort(key=lambda x: x[1], reverse=True)  # 按重要性降序排序
+        importance_pairs.sort(
+            key=lambda x: x[1], reverse=True
+        )  # 按重要性降序排序
         for name, importance in importance_pairs:
             print(f"{name}: {importance:.4f}")
 
@@ -360,7 +375,9 @@ def find_all_data_files(label_type, base_dir="labeled_data"):
     pattern = os.path.join(base_dir, "**", f"*_{label_type}.npy")
     files = glob.glob(pattern, recursive=True)
     if not files:
-        raise ValueError(f"No *_{label_type}.npy files found in {base_dir} directory")
+        raise ValueError(
+            f"No *_{label_type}.npy files found in {base_dir} directory"
+        )
     return sorted(files)
 
 
@@ -428,7 +445,9 @@ def auto_train_and_evaluate(
     # Generate feature names for all intervals in the window
     all_feature_names = []
     for i in range(window_size):
-        interval_names = [f"Interval_{i+1}_{name}" for name in base_feature_names]
+        interval_names = [
+            f"Interval_{i+1}_{name}" for name in base_feature_names
+        ]
         all_feature_names.extend(interval_names)
 
     # Selected feature names
@@ -518,7 +537,9 @@ def auto_train_and_evaluate(
         print(confusion_matrix(y_val, y_pred))
 
         # Save model and scaler
-        model_path = os.path.join(output_dir, f"{label_type}_{model_name}.joblib")
+        model_path = os.path.join(
+            output_dir, f"{label_type}_{model_name}.joblib"
+        )
         scaler_path = os.path.join(output_dir, f"{label_type}_scaler.joblib")
         joblib.dump(model, model_path)
         joblib.dump(scaler, scaler_path)
@@ -546,7 +567,9 @@ def auto_train_and_evaluate(
         print("\nFeature Importance Ranking:")
         importances = model.feature_importances_
         importance_pairs = list(zip(feature_names, importances))
-        importance_pairs.sort(key=lambda x: x[1], reverse=True)  # 按重要性降序排序
+        importance_pairs.sort(
+            key=lambda x: x[1], reverse=True
+        )  # 按重要性降序排序
         for name, importance in importance_pairs:
             print(f"{name}: {importance:.4f}")
 
@@ -678,7 +701,9 @@ def print_events_with_predictions(full_events_path, predictions, window_size):
             # Add prediction if it's a BSR event after window_size BSRs
             pred_str = "0"
             if event_type == "BSR":
-                if bsr_count >= window_size and pred_idx < len(rnti_predictions):
+                if bsr_count >= window_size and pred_idx < len(
+                    rnti_predictions
+                ):
                     pred_str = str(int(rnti_predictions[pred_idx])) + ":pred"
                     pred_idx += 1
                 bsr_count += 1
@@ -708,7 +733,9 @@ def print_mismatched_predictions(full_events_path, predictions, window_size):
 
         for event in events:
             if event[0] == 1:  # BSR event
-                if bsr_count >= window_size and pred_idx < len(rnti_predictions):
+                if bsr_count >= window_size and pred_idx < len(
+                    rnti_predictions
+                ):
                     # Convert BSR label to binary (0 or 1)
                     true_label = 1 if event[6] > 0 else 0
                     pred_label = int(rnti_predictions[pred_idx])
@@ -729,7 +756,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Train and evaluate request prediction models"
     )
-    parser.add_argument("--train", nargs="*", help="Path to training data files (.npy)")
+    parser.add_argument(
+        "--train", nargs="*", help="Path to training data files (.npy)"
+    )
     parser.add_argument("--val", help="Path to validation data file (.npy)")
     parser.add_argument(
         "--base-dir",
@@ -790,7 +819,9 @@ def main():
     try:
         if args.model:
             if not args.val:
-                print("Error: Validation file must be provided when using --model")
+                print(
+                    "Error: Validation file must be provided when using --model"
+                )
                 return
 
             # Load model and scaler
@@ -801,7 +832,9 @@ def main():
                 "labeled_data/models", f"{args.label_type}_scaler.joblib"
             )
 
-            if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+            if not os.path.exists(model_path) or not os.path.exists(
+                scaler_path
+            ):
                 print(f"Error: Model or scaler not found at {model_path}")
                 return
 
@@ -811,11 +844,18 @@ def main():
 
             # Get predictions and print statistics
             predictions = evaluate_and_record_predictions(
-                model, scaler, val_data, args.model, feature_indices, args.window_size
+                model,
+                scaler,
+                val_data,
+                args.model,
+                feature_indices,
+                args.window_size,
             )
 
             # Get full events file path
-            full_events_path = args.val.replace("_bsr_only.npy", "_full_events.npy")
+            full_events_path = args.val.replace(
+                "_bsr_only.npy", "_full_events.npy"
+            )
             if os.path.exists(full_events_path):
                 print_mismatched_predictions(
                     full_events_path, predictions, args.window_size
@@ -836,7 +876,9 @@ def main():
         # Check training files label type if provided
         if args.train:
             mismatched_files = [
-                f for f in args.train if not check_file_label_type(f, args.label_type)
+                f
+                for f in args.train
+                if not check_file_label_type(f, args.label_type)
             ]
             if mismatched_files:
                 print(
@@ -864,7 +906,9 @@ def main():
             # Find all training files except the validation file
             all_files = find_all_data_files(args.label_type, args.base_dir)
             val_file_abs = os.path.abspath(args.val)
-            train_files = [f for f in all_files if os.path.abspath(f) != val_file_abs]
+            train_files = [
+                f for f in all_files if os.path.abspath(f) != val_file_abs
+            ]
 
             if not train_files:
                 print("Error: No training files found")
@@ -928,10 +972,14 @@ def main():
         full_events_path = args.val.replace("_bsr_only.npy", "_full_events.npy")
         if os.path.exists(full_events_path):
             print_mismatched_predictions(
-                full_events_path, results[args.model]["predictions"], args.window_size
+                full_events_path,
+                results[args.model]["predictions"],
+                args.window_size,
             )
             print_events_with_predictions(
-                full_events_path, results[args.model]["predictions"], args.window_size
+                full_events_path,
+                results[args.model]["predictions"],
+                args.window_size,
             )
 
     except Exception as e:

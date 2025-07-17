@@ -20,7 +20,9 @@ try:
     import gitlab
     from gitlab.v4.objects import Project
 except ImportError:
-    print("Install Gitlab Python library: https://pypi.org/project/python-gitlab/")
+    print(
+        "Install Gitlab Python library: https://pypi.org/project/python-gitlab/"
+    )
     sys.exit(1)
 
 
@@ -40,7 +42,10 @@ def _parse_args() -> Tuple[str, str, str, str, int, bool]:
         help="Project full name in group/name format (default: %(default)s)",
     )
     parser.add_argument(
-        "--branch", required=True, type=str, help="Remote branch in srsgnb repository."
+        "--branch",
+        required=True,
+        type=str,
+        help="Remote branch in srsgnb repository.",
     )
     parser.add_argument(
         "--job",
@@ -87,7 +92,9 @@ def _search_job_by_name(
         for job in pipeline.jobs.list(iterator=True):
             if job.name == job_name:
                 print(f'🟢 Job "{job.name}" found (id: {job.id})')
-                variable_dict.update(_extract_variables_from_job(project, job.id))
+                variable_dict.update(
+                    _extract_variables_from_job(project, job.id)
+                )
                 if "TESTBED" not in variable_dict:
                     variable_dict["TESTBED"] = "none"
                 return variable_dict
@@ -100,7 +107,9 @@ def _search_job_by_name(
     return variable_dict
 
 
-def _extract_variables_from_job(project: Project, job_id: int) -> Dict[str, str]:
+def _extract_variables_from_job(
+    project: Project, job_id: int
+) -> Dict[str, str]:
     job = project.jobs.get(job_id)
     job_log = job.trace().decode("utf-8")
 
@@ -138,12 +147,17 @@ def main():
     """
     try:
         token, project_name, branch, job, timeout, dryrun = _parse_args()
-        project = _get_project(token=token, instance=GITLAB_URL, project=project_name)
+        project = _get_project(
+            token=token, instance=GITLAB_URL, project=project_name
+        )
         variable_dict = _search_job_by_name(
             project=project, job_name=job, timeout=timeout
         )
         _create_pipeline(
-            project=project, branch=branch, variables=variable_dict, dryrun=dryrun
+            project=project,
+            branch=branch,
+            variables=variable_dict,
+            dryrun=dryrun,
         )
     except KeyboardInterrupt:
         print()

@@ -270,7 +270,9 @@ def test_zmq_reestablishment_sequentially_full_rate(
 
         # Wait for reestablished UEs
         for ue_attached_info, task, iperf_request in iperf_dict:
-            iperf_wait_until_finish(ue_attached_info, fivegc, task, iperf_request)
+            iperf_wait_until_finish(
+                ue_attached_info, fivegc, task, iperf_request
+            )
 
 
 @mark.parametrize(
@@ -333,8 +335,12 @@ def test_zmq_reestablishment_parallel(
             ue_reestablishment_parallel(ue_8, reestablishment_time)
             ping_wait_until_finish(ping_task_array)
 
-        logging.info("Starting traffic after all reestablishments have been completed")
-        ping_task_array = ping_start(ue_attach_info_dict, fivegc, reestablishment_time)
+        logging.info(
+            "Starting traffic after all reestablishments have been completed"
+        )
+        ping_task_array = ping_start(
+            ue_attach_info_dict, fivegc, reestablishment_time
+        )
         ping_wait_until_finish(ping_task_array)
 
 
@@ -416,9 +422,13 @@ def test_zmq_reestablishment_parallel_full_rate(
             )
             ue_reestablishment_parallel(ue_8, reestablishment_time)
             for ue_attached_info, task, iperf_request in iperf_dict:
-                iperf_wait_until_finish(ue_attached_info, fivegc, task, iperf_request)
+                iperf_wait_until_finish(
+                    ue_attached_info, fivegc, task, iperf_request
+                )
 
-        logging.info("Starting traffic after all reestablishments have been completed")
+        logging.info(
+            "Starting traffic after all reestablishments have been completed"
+        )
         iperf_parallel(
             ue_attach_info_dict,
             fivegc,
@@ -449,7 +459,9 @@ def _iterator_over_attached_ues(
     log_ip_level: str,
     warning_as_errors: bool = True,
 ) -> Generator[
-    Tuple[Dict[UEStub, UEAttachedInfo], Dict[UEStub, UEAttachedInfo]], None, None
+    Tuple[Dict[UEStub, UEAttachedInfo], Dict[UEStub, UEAttachedInfo]],
+    None,
+    None,
 ]:
 
     with _test_reestablishments(
@@ -481,10 +493,14 @@ def _iterator_over_attached_ues(
             other_ue_attach_info_dict = dict(ue_attach_info_dict)
             other_ue_attach_info_dict.pop(ue_stub)
 
-            yield {ue_stub: ue_attach_info_dict[ue_stub]}, other_ue_attach_info_dict
+            yield {
+                ue_stub: ue_attach_info_dict[ue_stub]
+            }, other_ue_attach_info_dict
 
         # Pings after reest
-        logging.info("Starting traffic after all reestablishments have been completed")
+        logging.info(
+            "Starting traffic after all reestablishments have been completed"
+        )
         yield {}, ue_attach_info_dict
 
 
@@ -545,7 +561,13 @@ def _test_reestablishments(
         for ue_stub in ue_array:
             ue_validate_no_reattaches(ue_stub)
 
-        stop(ue_array, gnb, fivegc, retina_data, warning_as_errors=warning_as_errors)
+        stop(
+            ue_array,
+            gnb,
+            fivegc,
+            retina_data,
+            warning_as_errors=warning_as_errors,
+        )
 
     finally:
         get_kpis(gnb, ue_array=ue_array, metrics_summary=metrics_summary)

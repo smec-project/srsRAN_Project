@@ -32,16 +32,28 @@ class PetsController:
         self.app_connections: Dict[str, socket.socket] = {}
 
         # RAN metrics connection setup
-        self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        self.ran_metrics_socket = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
+        self.ran_metrics_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+        )
+        self.ran_metrics_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEPORT, 1
+        )
         self.ran_metrics_ip = ran_metrics_ip
         self.ran_metrics_port = ran_metrics_port
 
         # RAN control connection setup
-        self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        self.ran_control_socket = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
+        self.ran_control_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+        )
+        self.ran_control_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEPORT, 1
+        )
         self.ran_control_ip = ran_control_ip
         self.ran_control_port = ran_control_port
 
@@ -65,8 +77,12 @@ class PetsController:
         self.ue_bsr_events: Dict[str, deque] = (
             {}
         )  # RNTI -> deque of (bytes, slot) tuples
-        self.ue_last_bsr: Dict[str, tuple] = {}  # RNTI -> (bytes, slot) of last BSR
-        self.ue_peak_buffer_size: Dict[str, int] = {}  # RNTI -> peak buffer size
+        self.ue_last_bsr: Dict[str, tuple] = (
+            {}
+        )  # RNTI -> (bytes, slot) of last BSR
+        self.ue_peak_buffer_size: Dict[str, int] = (
+            {}
+        )  # RNTI -> peak buffer size
 
         # Track latest BSR state for each UE
         self.ue_latest_bsr: Dict[str, int] = {}  # RNTI -> latest BSR bytes
@@ -89,8 +105,12 @@ class PetsController:
         self.log_file = open("controller.txt", "w") if enable_logging else None
 
         # Store events for each RNTI
-        self.window_events: Dict[str, list] = {}  # RNTI -> list of events in window
-        self.ue_slot_cycles_prb: Dict[str, int] = {}  # RNTI -> current PRB slot cycle
+        self.window_events: Dict[str, list] = (
+            {}
+        )  # RNTI -> list of events in window
+        self.ue_slot_cycles_prb: Dict[str, int] = (
+            {}
+        )  # RNTI -> current PRB slot cycle
         self.ue_slot_cycles_ctrl: Dict[str, int] = (
             {}
         )  # RNTI -> current SR/BSR slot cycle
@@ -146,7 +166,9 @@ class PetsController:
             return False
 
         # Start threads for different functionalities
-        threading.Thread(target=self._handle_app_connections, daemon=True).start()
+        threading.Thread(
+            target=self._handle_app_connections, daemon=True
+        ).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
 
         # Start priority update thread
@@ -212,7 +234,9 @@ class PetsController:
                 self.log(f"New application connected from {addr}")
                 self.app_connections[addr[0]] = conn
                 threading.Thread(
-                    target=self._handle_app_messages, args=(conn, addr), daemon=True
+                    target=self._handle_app_messages,
+                    args=(conn, addr),
+                    daemon=True,
                 ).start()
             except Exception as e:
                 self.log(f"Error accepting application connection: {e}")
@@ -275,9 +299,13 @@ class PetsController:
                             # Store request start time
                             if rnti not in self.request_start_times:
                                 self.request_start_times[rnti] = {}
-                            self.request_start_times[rnti][seq_num] = time.time()
+                            self.request_start_times[rnti][
+                                seq_num
+                            ] = time.time()
                         else:
-                            self.log(f"Warning: Request for unknown RNTI {rnti}")
+                            self.log(
+                                f"Warning: Request for unknown RNTI {rnti}"
+                            )
 
                     elif msg_type == "DONE":
                         # Format: "DONE|RNTI|SEQ_NUM"
@@ -333,7 +361,9 @@ class PetsController:
         """Send priority update to RAN"""
         try:
             # Format RNTI string and pack message in the correct format
-            rnti_str = f"{rnti:<4}".encode("ascii")  # Left align, space pad to 4 chars
+            rnti_str = f"{rnti:<4}".encode(
+                "ascii"
+            )  # Left align, space pad to 4 chars
             msg = struct.pack("=5sdb", rnti_str, priority, False)
 
             self.ran_control_socket.send(msg)
@@ -418,7 +448,9 @@ class PetsController:
             cycles = self.ue_slot_cycles_prb
             # Get the previous PRB slot
             prev_events = [
-                e for e in self.window_events[rnti] if e[0] == self.EVENT_TYPES["PRB"]
+                e
+                for e in self.window_events[rnti]
+                if e[0] == self.EVENT_TYPES["PRB"]
             ]
         else:  # SR or BSR
             cycles = self.ue_slot_cycles_ctrl
@@ -466,7 +498,9 @@ class PetsController:
                 updated_times = []
                 for req_id, remaining in self.ue_remaining_times[rnti]:
                     new_remaining = remaining - time_passed
-                    if new_remaining > 0:  # Only keep requests with remaining time > 0
+                    if (
+                        new_remaining > 0
+                    ):  # Only keep requests with remaining time > 0
                         updated_times.append((req_id, new_remaining))
                 self.ue_remaining_times[rnti] = updated_times
 
@@ -551,7 +585,9 @@ class PetsController:
             end_bsr = events[current_end_idx]
 
             # Find first PRB after start_bsr but before final_bsr
-            first_prb_slot = final_bsr_slot  # Default to final BSR slot if no PRB found
+            first_prb_slot = (
+                final_bsr_slot  # Default to final BSR slot if no PRB found
+            )
             search_idx = current_start_idx + 1
             while search_idx < len(events):
                 if events[search_idx][0] == self.EVENT_TYPES["PRB"]:
@@ -586,7 +622,9 @@ class PetsController:
             bsr_per_prb = bsr_diff / (total_prbs + 1e-6)
 
             # Calculate rates using slots (multiply by 1000 to convert to per-millisecond rate)
-            window_duration_ms = window_slots * 0.5  # Assuming each slot is 0.5ms
+            window_duration_ms = (
+                window_slots * 0.5
+            )  # Assuming each slot is 0.5ms
             bsr_update_rate = 1000.0 / (window_duration_ms + 1e-6)
             sr_rate = sr_count * 1000.0 / (window_duration_ms + 1e-6)
 
@@ -685,20 +723,28 @@ class PetsController:
                                     == self.EVENT_TYPES["SR"]
                                 ):
                                     has_sr = True
-                                    earliest_sr_time = self.window_events[rnti][i][3]
+                                    earliest_sr_time = self.window_events[rnti][
+                                        i
+                                    ][3]
                                     break
 
                             if has_sr:
                                 remaining_time = (
                                     remaining_time
-                                    - ((latest_bsr[3] - earliest_sr_time) * 1000 + 5)
-                                    - (self.gnb_max_prb_slot - latest_bsr[4]) * 0.5
+                                    - (
+                                        (latest_bsr[3] - earliest_sr_time)
+                                        * 1000
+                                        + 5
+                                    )
+                                    - (self.gnb_max_prb_slot - latest_bsr[4])
+                                    * 0.5
                                 )
                             else:
                                 remaining_time = (
                                     remaining_time
                                     - ((latest_bsr[3] - prb_time) * 1000)
-                                    - (self.gnb_max_prb_slot - latest_bsr[4]) * 0.5
+                                    - (self.gnb_max_prb_slot - latest_bsr[4])
+                                    * 0.5
                                 )
 
                         # Add new request with its remaining time, using timestamp as ID
@@ -709,23 +755,23 @@ class PetsController:
                         )  # Use timestamp as request ID
 
                     # Log prediction and all remaining times
-                    log_msg = (
-                        f"Prediction for RNTI {rnti}: {prediction} at {time.time()}, "
-                    )
+                    log_msg = f"Prediction for RNTI {rnti}: {prediction} at {time.time()}, "
                     log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
                     log_msg += f"Total positive predictions: {self.positive_predictions.get(rnti, 0)}"
                     if rnti in self.ue_remaining_times:
-                        for req_label, remaining in self.ue_remaining_times[rnti]:
-                            log_msg += (
-                                f", Request_{req_label}_remaining={remaining:.2f}ms"
-                            )
+                        for req_label, remaining in self.ue_remaining_times[
+                            rnti
+                        ]:
+                            log_msg += f", Request_{req_label}_remaining={remaining:.2f}ms"
                     self.log(log_msg)
 
     def _handle_sr_metrics(self, values):
         """Handle SR indication metrics"""
         rnti = values["RNTI"][-4:]
         slot = int(values["SLOT"])
-        self.log(f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}")
+        self.log(
+            f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}"
+        )
         self.add_event(rnti, "SR", time.time(), slot)
 
     def _handle_bsr_metrics(self, values):

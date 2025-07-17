@@ -42,7 +42,12 @@ from .steps.configuration import (
     get_minimum_sample_rate_for_bandwidth,
     is_tdd,
 )
-from .steps.stub import INTER_UE_START_PERIOD, iperf_parallel, start_and_attach, stop
+from .steps.stub import (
+    INTER_UE_START_PERIOD,
+    iperf_parallel,
+    start_and_attach,
+    stop,
+)
 
 TINY_DURATION = 10
 SHORT_DURATION = 20
@@ -173,7 +178,9 @@ def get_maximum_throughput(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -232,7 +239,9 @@ def test_srsue(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -302,7 +311,9 @@ def test_android(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -369,7 +380,11 @@ def test_android_hp(
 
 @mark.parametrize(
     "direction",
-    (param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),),
+    (
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
+    ),
 )
 @mark.parametrize(
     "protocol",
@@ -381,7 +396,8 @@ def test_android_hp(
 )
 @mark.zmq_2x2_mimo
 @mark.flaky(
-    reruns=2, only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"]
+    reruns=2,
+    only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"],
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_zmq_2x2_mimo(
@@ -430,7 +446,9 @@ def test_zmq_2x2_mimo(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -446,7 +464,8 @@ def test_zmq_2x2_mimo(
 )
 @mark.zmq_4x4_mimo
 @mark.flaky(
-    reruns=2, only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"]
+    reruns=2,
+    only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"],
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_zmq_4x4_mimo(
@@ -493,7 +512,9 @@ def test_zmq_4x4_mimo(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -551,7 +572,9 @@ def test_smoke(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -632,7 +655,9 @@ def test_zmq(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(

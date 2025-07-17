@@ -32,7 +32,12 @@ from pytest import mark, param
 from retina.client.manager import RetinaTestManager
 from retina.launcher.artifacts import RetinaTestData
 from retina.launcher.utils import configure_artifacts
-from retina.protocol.base_pb2 import FiveGCDefinition, PLMN, StartInfo, UEDefinition
+from retina.protocol.base_pb2 import (
+    FiveGCDefinition,
+    PLMN,
+    StartInfo,
+    UEDefinition,
+)
 from retina.protocol.fivegc_pb2 import FiveGCStartInfo
 from retina.protocol.fivegc_pb2_grpc import FiveGCStub
 from retina.protocol.gnb_pb2 import GNBStartInfo
@@ -62,7 +67,9 @@ def test_rf_b200_config(
     """
     Run gnb with B200 example config and validate it doesn't crash.
     """
-    run_config(retina_manager, retina_data, fivegc, gnb, timeout, config_file, "")
+    run_config(
+        retina_manager, retina_data, fivegc, gnb, timeout, config_file, ""
+    )
 
 
 @mark.rf_n300
@@ -109,7 +116,9 @@ def run_config(
             "gnb": {
                 "templates": {
                     "main": str(
-                        Path(__file__).joinpath(f"../../../../{config_file}").resolve()
+                        Path(__file__)
+                        .joinpath(f"../../../../{config_file}")
+                        .resolve()
                     ),
                     "cu": tmp_file.name,
                     "du": tmp_file.name,

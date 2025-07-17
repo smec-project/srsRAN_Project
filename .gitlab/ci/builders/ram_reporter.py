@@ -38,7 +38,9 @@ def get_memory_usage(memory_path):
             memory_usage = int(f.read().strip())
         return memory_usage
     except FileNotFoundError:
-        print(f"The file {memory_path} not found. Make sure that you use cgroups v2.")
+        print(
+            f"The file {memory_path} not found. Make sure that you use cgroups v2."
+        )
         return None
     except Exception as e:
         print(f"Error to read {memory_path}: {e}")

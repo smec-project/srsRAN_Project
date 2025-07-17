@@ -105,14 +105,20 @@ def configure_test_parameters(
         retina_data.test_config["gnb"]["parameters"]["n3_enable"] = True
     if sample_rate is not None:
         retina_data.test_config["ue"]["parameters"]["sample_rate"] = sample_rate
-        retina_data.test_config["gnb"]["parameters"]["sample_rate"] = sample_rate
+        retina_data.test_config["gnb"]["parameters"][
+            "sample_rate"
+        ] = sample_rate
     if is_tdd(band):
         retina_data.test_config["ue"]["parameters"]["rx_ant"] = "rx"
 
     metrics_server = None
-    for node_name in retina_manager.get_testbed_info().get("generic", {}).keys():
+    for node_name in (
+        retina_manager.get_testbed_info().get("generic", {}).keys()
+    ):
         if "metrics-server" in node_name:
-            metrics_server = retina_manager.get_testbed_info()["generic"][node_name]
+            metrics_server = retina_manager.get_testbed_info()["generic"][
+                node_name
+            ]
 
     if (
         metrics_server is not None
@@ -221,7 +227,9 @@ def configure_metric_server_for_gnb(
     retina_data.test_config["gnb"]["parameters"][
         "metrics_hostname"
     ] = metrics_server.address
-    retina_data.test_config["gnb"]["parameters"]["metrics_port"] = metrics_server.port
+    retina_data.test_config["gnb"]["parameters"][
+        "metrics_port"
+    ] = metrics_server.port
 
     logging.info("Test config: \n%s", pformat(retina_data.test_config))
     retina_manager.parse_configuration(retina_data.test_config)

@@ -25,16 +25,28 @@ class TuttiController:
         self.app_connections: Dict[str, socket.socket] = {}
 
         # RAN metrics connection setup
-        self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        self.ran_metrics_socket = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
+        self.ran_metrics_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+        )
+        self.ran_metrics_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEPORT, 1
+        )
         self.ran_metrics_ip = ran_metrics_ip
         self.ran_metrics_port = ran_metrics_port
 
         # RAN control connection setup
-        self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        self.ran_control_socket = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
+        self.ran_control_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+        )
+        self.ran_control_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEPORT, 1
+        )
         self.ran_control_ip = ran_control_ip
         self.ran_control_port = ran_control_port
 
@@ -52,7 +64,9 @@ class TuttiController:
         )  # UE_IDX -> {app_id -> requirements}
 
         # Track resource requirements and pending requests for each UE
-        self.ue_resource_needs: Dict[str, int] = {}  # RNTI -> total bytes needed
+        self.ue_resource_needs: Dict[str, int] = (
+            {}
+        )  # RNTI -> total bytes needed
         self.ue_pending_requests: Dict[str, Dict[int, int]] = (
             {}
         )  # RNTI -> {request_id -> bytes}
@@ -70,7 +84,9 @@ class TuttiController:
 
         # Track PRB allocation history
         self.HISTORY_WINDOW = 100  # Keep last 100 slot records
-        self.prb_history: Dict[str, Dict[int, int]] = {}  # RNTI -> {slot -> prbs}
+        self.prb_history: Dict[str, Dict[int, int]] = (
+            {}
+        )  # RNTI -> {slot -> prbs}
         self.slot_history: list = []  # Ordered list of slots we've seen
 
         # Track allocated PRBs for each request
@@ -107,7 +123,9 @@ class TuttiController:
             return False
 
         # Start threads for different functionalities
-        threading.Thread(target=self._handle_app_connections, daemon=True).start()
+        threading.Thread(
+            target=self._handle_app_connections, daemon=True
+        ).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
 
         return True
@@ -121,10 +139,14 @@ class TuttiController:
                 self.log_file.flush()
                 self.app_connections[addr[0]] = conn
                 threading.Thread(
-                    target=self._handle_app_messages, args=(conn, addr), daemon=True
+                    target=self._handle_app_messages,
+                    args=(conn, addr),
+                    daemon=True,
                 ).start()
             except Exception as e:
-                self.log_file.write(f"Error accepting application connection: {e}\n")
+                self.log_file.write(
+                    f"Error accepting application connection: {e}\n"
+                )
                 self.log_file.flush()
 
     def _handle_app_messages(self, conn: socket.socket, addr):
@@ -137,7 +159,9 @@ class TuttiController:
 
             app_id = data.decode("utf-8").strip()
             self.app_connections[app_id] = conn
-            self.log_file.write(f"Application {app_id} registered from {addr}\n")
+            self.log_file.write(
+                f"Application {app_id} registered from {addr}\n"
+            )
             self.log_file.flush()
 
             while self.running:
@@ -191,12 +215,16 @@ class TuttiController:
 
                             # Update resource needs and pending requests
                             self.ue_resource_needs[rnti] += request_size
-                            self.ue_pending_requests[rnti][seq_num] = request_size
+                            self.ue_pending_requests[rnti][
+                                seq_num
+                            ] = request_size
 
                             # Store request start time
                             if rnti not in self.request_start_times:
                                 self.request_start_times[rnti] = {}
-                            self.request_start_times[rnti][seq_num] = time.time()
+                            self.request_start_times[rnti][
+                                seq_num
+                            ] = time.time()
                         else:
                             self.log_file.write(
                                 f"Warning: Request for unknown RNTI {rnti}\n"
@@ -228,7 +256,9 @@ class TuttiController:
                             rnti in self.ue_pending_requests
                             and seq_num in self.ue_pending_requests[rnti]
                         ):
-                            completed_size = self.ue_pending_requests[rnti][seq_num]
+                            completed_size = self.ue_pending_requests[rnti][
+                                seq_num
+                            ]
                             self.ue_resource_needs[rnti] -= completed_size
                             del self.ue_pending_requests[rnti][seq_num]
 
@@ -242,7 +272,9 @@ class TuttiController:
                             self.log_file.flush()
 
                 except Exception as e:
-                    self.log_file.write(f"Error processing application message: {e}\n")
+                    self.log_file.write(
+                        f"Error processing application message: {e}\n"
+                    )
                     self.log_file.flush()
                     break
 
@@ -278,7 +310,9 @@ class TuttiController:
         """Send priority update to RAN"""
         try:
             # Format RNTI string and pack message in the correct format
-            rnti_str = f"{rnti:<4}".encode("ascii")  # Left align, space pad to 4 chars
+            rnti_str = f"{rnti:<4}".encode(
+                "ascii"
+            )  # Left align, space pad to 4 chars
             msg = struct.pack("=5sdb", rnti_str, priority, False)
 
             self.ran_control_socket.send(msg)
@@ -354,7 +388,9 @@ class TuttiController:
                 for rnti in list(self.request_start_times.keys()):
                     # Skip if we don't have UE info yet
                     if rnti not in self.ue_info:
-                        self.log_file.write(f"Waiting for UE info for RNTI {rnti}\n")
+                        self.log_file.write(
+                            f"Waiting for UE info for RNTI {rnti}\n"
+                        )
                         continue
 
                     # Initialize priority if not exists
@@ -385,7 +421,9 @@ class TuttiController:
                     ) * 1000
                     deadline_ms = latency_req - elapsed_time_ms
                     remaining_seconds = deadline_ms / 1000.0
-                    priority = 1.0 / (remaining_seconds * remaining_seconds + 1e-6)
+                    priority = 1.0 / (
+                        remaining_seconds * remaining_seconds + 1e-6
+                    )
 
                     # Update priority state and scheduler
                     self.ue_priorities[rnti] = priority
@@ -457,7 +495,11 @@ class TuttiController:
         self.rnti_to_ue_idx[rnti] = ue_idx
 
         # Store basic metrics
-        self.current_metrics[rnti] = {"UE_IDX": ue_idx, "PRBs": prbs, "SLOT": slot}
+        self.current_metrics[rnti] = {
+            "UE_IDX": ue_idx,
+            "PRBs": prbs,
+            "SLOT": slot,
+        }
 
         # Update latest PRB allocation and slot
         self.ue_prb_status[rnti] = (slot, prbs)

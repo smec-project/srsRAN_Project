@@ -16,7 +16,9 @@ class PriorityController:
         try:
             self.sock.connect((self.server_ip, self.server_port))
             self.connected = True
-            print(f"Connected to scheduler at {self.server_ip}:{self.server_port}")
+            print(
+                f"Connected to scheduler at {self.server_ip}:{self.server_port}"
+            )
             return True
         except Exception as e:
             print(f"Connection failed: {e}")
@@ -31,7 +33,9 @@ class PriorityController:
         print(f"Raw RNTI string: '{rnti}'")
 
         # Ensure RNTI is exactly 4 characters with null terminator
-        rnti_str = f"{rnti:<4}".encode("ascii")  # Left align, space pad to 4 chars
+        rnti_str = f"{rnti:<4}".encode(
+            "ascii"
+        )  # Left align, space pad to 4 chars
 
         # Debug print the bytes being sent
         print(f"Sending bytes: {[hex(x) for x in rnti_str]}")
@@ -44,7 +48,9 @@ class PriorityController:
 
         try:
             bytes_sent = self.sock.send(msg)
-            print(f"Set RNTI {rnti} priority to {priority} (sent {bytes_sent} bytes)")
+            print(
+                f"Set RNTI {rnti} priority to {priority} (sent {bytes_sent} bytes)"
+            )
             return True
         except Exception as e:
             print(f"Failed to send priority: {e}")
@@ -98,10 +104,16 @@ def test_scenario(rnti: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test scheduler priority control")
-    parser.add_argument("--ip", default="127.0.0.1", help="Scheduler IP address")
+    parser = argparse.ArgumentParser(
+        description="Test scheduler priority control"
+    )
+    parser.add_argument(
+        "--ip", default="127.0.0.1", help="Scheduler IP address"
+    )
     parser.add_argument("--port", type=int, default=5555, help="Scheduler port")
-    parser.add_argument("--rnti", required=True, help="RNTI value in hex (e.g., 47e1)")
+    parser.add_argument(
+        "--rnti", required=True, help="RNTI value in hex (e.g., 47e1)"
+    )
 
     args = parser.parse_args()
 

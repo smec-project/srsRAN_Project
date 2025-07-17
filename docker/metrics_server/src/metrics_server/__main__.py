@@ -86,14 +86,18 @@ def _parse_args() -> Tuple[InfluxDBClient, str, str, bool, int, int]:
     parser = argparse.ArgumentParser(
         description="Real time receiving and parsing srsRAN Project gnb metrics data and pushing it to influx db."
     )
-    parser.add_argument("--port", type=int, required=True, help="Port to listen from.")
+    parser.add_argument(
+        "--port", type=int, required=True, help="Port to listen from."
+    )
     parser.add_argument(
         "--db-config",
         nargs="*",
         required=True,
         help='Data base configuration in the format "key=value key=value"',
     )
-    parser.add_argument("--bucket", required=True, help="Bucket to save the data.")
+    parser.add_argument(
+        "--bucket", required=True, help="Bucket to save the data."
+    )
     parser.add_argument(
         "--clean-bucket",
         action="store_true",

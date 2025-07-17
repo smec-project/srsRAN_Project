@@ -43,7 +43,9 @@ from .steps.stub import iperf_parallel, start_and_attach, stop
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -90,7 +92,9 @@ def test_multiple_configs_zmq(
         always_download_artifacts=False,
     )
 
-    ue_attach_info_dict = start_and_attach((ue,), gnb, fivegc, gnb_post_cmd=(config,))
+    ue_attach_info_dict = start_and_attach(
+        (ue,), gnb, fivegc, gnb_post_cmd=(config,)
+    )
 
     iperf_parallel(
         ue_attach_info_dict,
@@ -102,4 +106,11 @@ def test_multiple_configs_zmq(
         bitrate_threshold_ratio=0,  # bitrate != 0
     )
     sleep(wait_before_power_off)
-    stop((ue,), gnb, fivegc, retina_data, warning_as_errors=True, fail_if_kos=True)
+    stop(
+        (ue,),
+        gnb,
+        fivegc,
+        retina_data,
+        warning_as_errors=True,
+        fail_if_kos=True,
+    )

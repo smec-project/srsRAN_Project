@@ -108,7 +108,9 @@ def test_ue(
                 },
                 "templates": {
                     "cu": str(
-                        Path(__file__).joinpath("../test_mode/config_ue.yml").resolve()
+                        Path(__file__)
+                        .joinpath("../test_mode/config_ue.yml")
+                        .resolve()
                     ),
                     "du": tmp_file.name,
                 },
@@ -244,7 +246,9 @@ def _test_ru(
                 },
                 "templates": {
                     "cu": str(
-                        Path(__file__).joinpath("../test_mode/config_ru.yml").resolve()
+                        Path(__file__)
+                        .joinpath("../test_mode/config_ru.yml")
+                        .resolve()
                     ),
                     "du": tmp_file.name,
                     "ru": tmp_file.name,

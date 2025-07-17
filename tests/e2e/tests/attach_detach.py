@@ -85,7 +85,9 @@ def test_smoke(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -147,7 +149,9 @@ def test_zmq(
     (
         param(IPerfDir.DOWNLINK, id="downlink", marks=mark.downlink),
         param(IPerfDir.UPLINK, id="uplink", marks=mark.uplink),
-        param(IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional),
+        param(
+            IPerfDir.BIDIRECTIONAL, id="bidirectional", marks=mark.bidirectional
+        ),
     ),
 )
 @mark.parametrize(
@@ -264,9 +268,13 @@ def _attach_and_detach_multi_ues(
 
     # Stop and attach half of the UEs while the others are connecting and doing iperf
     for _ in range(reattach_count):
-        ue_stop(ue_array_to_attach, retina_data, ue_stop_timeout=ue_stop_timeout)
+        ue_stop(
+            ue_array_to_attach, retina_data, ue_stop_timeout=ue_stop_timeout
+        )
         sleep(ue_settle_time)
-        ue_attach_info_dict = ue_start_and_attach(ue_array_to_attach, gnb, fivegc)
+        ue_attach_info_dict = ue_start_and_attach(
+            ue_array_to_attach, gnb, fivegc
+        )
     # final stop will be triggered by teardown
 
     # Stop and validate iperfs

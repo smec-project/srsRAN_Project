@@ -63,7 +63,9 @@ from retina.protocol.ue_pb2 import (
 )
 from retina.protocol.ue_pb2_grpc import UEStub
 
-RF_MAX_TIMEOUT: int = 5 * 60  # Time enough in RF when loading a new image in the sdr
+RF_MAX_TIMEOUT: int = (
+    5 * 60
+)  # Time enough in RF when loading a new image in the sdr
 UE_STARTUP_TIMEOUT: int = RF_MAX_TIMEOUT
 GNB_STARTUP_TIMEOUT: int = (
     2  # GNB delay (we wait x seconds and check it's still alive). UE later and has a big timeout
@@ -153,7 +155,9 @@ def start_network(
             # Set PLMN to HPLMN of first UE
             plmn = ue_hplmn
             logging.info(
-                "Setting PLMN to HPLMN of first UE. MCC=%s MNC=%s", plmn.mcc, plmn.mnc
+                "Setting PLMN to HPLMN of first UE. MCC=%s MNC=%s",
+                plmn.mcc,
+                plmn.mnc,
             )
         fivegc.AddUESubscriber(ue_def.subscriber)
         if ue_def.zmq_ip is not None:
@@ -209,7 +213,9 @@ def ue_start_and_attach(
 
     # Attach in parallel
     ue_attach_task_dict: Dict[UEStub, grpc.Future] = {
-        ue_stub: ue_stub.WaitUntilAttached.future(UInt32Value(value=attach_timeout))
+        ue_stub: ue_stub.WaitUntilAttached.future(
+            UInt32Value(value=attach_timeout)
+        )
         for ue_stub in ue_array
     }
     for ue_stub, task in ue_attach_task_dict.items():
@@ -253,7 +259,9 @@ def _log_attached_ue(future: grpc.Future, ue_stub: UEStub):
         logging.info(
             "UE [%s] attached:\n%s%s ",
             id(ue_stub),
-            MessageToString(ue_stub.GetDefinition(Empty()).subscriber, indent=2),
+            MessageToString(
+                ue_stub.GetDefinition(Empty()).subscriber, indent=2
+            ),
             MessageToString(future.result(), indent=2),
         )
 
@@ -267,7 +275,9 @@ def ping(
     """
     Ping command between an UE and a 5GC
     """
-    ping_task_array = ping_start(ue_attach_info_dict, fivegc, ping_count, time_step)
+    ping_task_array = ping_start(
+        ue_attach_info_dict, fivegc, ping_count, time_step
+    )
     ping_wait_until_finish(ping_task_array)
 
 
@@ -330,7 +340,11 @@ def _print_ping_result(msg: str, task: grpc.Future):
         if not result.status:
             log_fn = logging.error
         log_fn("Ping %s:\n%s", msg, MessageToString(result, indent=2))
-    except (grpc.RpcError, grpc.FutureCancelledError, grpc.FutureTimeoutError) as err:
+    except (
+        grpc.RpcError,
+        grpc.FutureCancelledError,
+        grpc.FutureTimeoutError,
+    ) as err:
         logging.error(ErrorReportedByAgent(err))
 
 
@@ -407,7 +421,11 @@ def iperf_sequentially(
             )
             sleep(iperf_duration)
             iperf_success, iperf_data = iperf_wait_until_finish(
-                ue_attached_info, fivegc, task, iperf_request, bitrate_threshold_ratio
+                ue_attached_info,
+                fivegc,
+                task,
+                iperf_request,
+                bitrate_threshold_ratio,
             )
             if iperf_success:
                 return iperf_success, iperf_data
@@ -474,7 +492,9 @@ def iperf_wait_until_finish(
     # Stop server, get results and print it
     try:
         task.result()
-        iperf_data: IPerfResponse = fivegc.StopIPerfService(iperf_request.server)
+        iperf_data: IPerfResponse = fivegc.StopIPerfService(
+            iperf_request.server
+        )
         logging.info(
             "Iperf %s [%s %s]:\n%s",
             ue_attached_info.ipv4,
@@ -590,7 +610,9 @@ def _log_reestablishment(future: grpc.Future, ue_stub: UEStub):
         )
     except grpc.RpcError as err:
         logging.error(
-            "Reestablishment UE [%s] failed: %s", id(ue_stub), ErrorReportedByAgent(err)
+            "Reestablishment UE [%s] failed: %s",
+            id(ue_stub),
+            ErrorReportedByAgent(err),
         )
 
 
@@ -617,7 +639,9 @@ def ue_expect_handover(ue_stub: UEStub, timeout: int) -> grpc.Future:
     """
     Creates a future object that will finish when a HO takes places or when the timeout is reached
     """
-    ho_future: grpc.Future = ue_stub.ExpectHandover.future(UInt32Value(value=timeout))
+    ho_future: grpc.Future = ue_stub.ExpectHandover.future(
+        UInt32Value(value=timeout)
+    )
     ho_future.add_done_callback(
         lambda _task, _ue_stub=ue_stub: _log_handover(_task, _ue_stub)
     )
@@ -628,10 +652,16 @@ def _log_handover(future: grpc.Future, ue_stub: UEStub):
     try:
         result: HandoverInfo = future.result()
         log_fn = logging.info if result.status else logging.error
-        log_fn("Handover UE [%s]:\n%s", id(ue_stub), MessageToString(result, indent=2))
+        log_fn(
+            "Handover UE [%s]:\n%s",
+            id(ue_stub),
+            MessageToString(result, indent=2),
+        )
     except grpc.RpcError as err:
         logging.error(
-            "Handover UE [%s] failed: %s", id(ue_stub), ErrorReportedByAgent(err)
+            "Handover UE [%s] failed: %s",
+            id(ue_stub),
+            ErrorReportedByAgent(err),
         )
 
 
@@ -667,11 +697,15 @@ def validate_ue_registered_via_ims(
         sorted(
             [
                 subscriber.imsi
-                for subscriber in core.GetImsRegisteredUESubscriberArray(Empty()).value
+                for subscriber in core.GetImsRegisteredUESubscriberArray(
+                    Empty()
+                ).value
             ]
         )
     )
-    logging.info("IMSI of registered UEs in IMS: %s", registered_subscriber_array)
+    logging.info(
+        "IMSI of registered UEs in IMS: %s", registered_subscriber_array
+    )
     if expected_subscriber_array != registered_subscriber_array:
         pytest.fail("IMS Registered Subscriber array mismatch!")
 
@@ -706,7 +740,12 @@ def stop(
 
     if gnb is not None:
         error_message, _ = _stop_stub(
-            gnb, "GNB", retina_data, gnb_stop_timeout, log_search, warning_as_errors
+            gnb,
+            "GNB",
+            retina_data,
+            gnb_stop_timeout,
+            log_search,
+            warning_as_errors,
         )
         error_msg_array.append(error_message)
     if fivegc is not None:
@@ -739,7 +778,9 @@ def stop(
             _get_metrics_msg(ue_stub, f"UE_{index+1}", fail_if_kos=fail_if_kos)
         )
     if gnb is not None:
-        metrics_msg_array.append(_get_metrics_msg(gnb, "GNB", fail_if_kos=fail_if_kos))
+        metrics_msg_array.append(
+            _get_metrics_msg(gnb, "GNB", fail_if_kos=fail_if_kos)
+        )
     if fivegc is not None:
         metrics_msg_array.append(
             _get_metrics_msg(fivegc, "5GC", fail_if_kos=fail_if_kos)
@@ -751,7 +792,10 @@ def stop(
         pytest.fail(
             f"Metrics validation. {metrics_msg_array[0]}"
             + (
-                ("\nFull list of errors:\n - " + "\n - ".join(metrics_msg_array))
+                (
+                    "\nFull list of errors:\n - "
+                    + "\n - ".join(metrics_msg_array)
+                )
                 if len(metrics_msg_array) > 1
                 else ""
             )
@@ -821,7 +865,9 @@ def _stop_stub(
             elif stop_info.warning_count:
                 log_msg += f"First warning is: {stop_info.warning_msg}"
 
-            if stop_info.error_count or (warning_as_errors and stop_info.warning_count):
+            if stop_info.error_count or (
+                warning_as_errors and stop_info.warning_count
+            ):
                 retina_data.download_artifacts = True
                 error_msg += log_msg
             elif not warning_as_errors and stop_info.warning_count:
@@ -839,7 +885,9 @@ def _stop_stub(
     return error_msg, error_count
 
 
-def _get_metrics_msg(stub: RanStub, name: str, fail_if_kos: bool = False) -> str:
+def _get_metrics_msg(
+    stub: RanStub, name: str, fail_if_kos: bool = False
+) -> str:
     if fail_if_kos:
         with suppress(grpc.RpcError):
             metrics: Metrics = stub.GetMetrics(Empty())

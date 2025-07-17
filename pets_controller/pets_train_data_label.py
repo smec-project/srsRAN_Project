@@ -10,7 +10,13 @@ import time
 
 class TrainDataLabeler:
     # Define event type mapping
-    EVENT_TYPES = {"SR": 0, "BSR": 1, "PRB": 2, "REQUEST_START": 3, "REQUEST_END": 4}
+    EVENT_TYPES = {
+        "SR": 0,
+        "BSR": 1,
+        "PRB": 2,
+        "REQUEST_START": 3,
+        "REQUEST_END": 4,
+    }
 
     # BSR index to value mapping
     BSR_VALUES = [
@@ -70,7 +76,9 @@ class TrainDataLabeler:
                     # Extract request size from UE registration
                     if "New UE registered" in line:
                         parts = line.split(",")
-                        rnti = parts[0].split("RNTI:")[1].strip().replace("0x", "")
+                        rnti = (
+                            parts[0].split("RNTI:")[1].strip().replace("0x", "")
+                        )
                         size = int(parts[3].split("Size:")[1].split()[0])
                         self.request_sizes[rnti] = size
                         continue
@@ -133,7 +141,9 @@ class TrainDataLabeler:
                         rnti = parts[0].replace("0x", "")
                         slot = int(parts[1].split("slot=")[1].split()[0])
                         prbs = int(parts[2].split("prbs=")[1].split()[0])
-                        event = self.add_event(rnti, timestamp, "PRB", {"prbs": prbs})
+                        event = self.add_event(
+                            rnti, timestamp, "PRB", {"prbs": prbs}
+                        )
                         event["slot"] = slot
 
                 except Exception as e:
@@ -269,7 +279,8 @@ class TrainDataLabeler:
                 slot_idx + 1 < len(slot_events)
                 and slot_events[slot_idx]["type"] == "PRB"
                 and slot_events[slot_idx + 1]["type"] == "BSR"
-                and slot_events[slot_idx]["slot"] == slot_events[slot_idx + 1]["slot"]
+                and slot_events[slot_idx]["slot"]
+                == slot_events[slot_idx + 1]["slot"]
             ):
 
                 # Check if request should be inserted between them
@@ -312,7 +323,9 @@ class TrainDataLabeler:
         sorted_idx = 0
         end_idx = 0
 
-        while sorted_idx < len(sorted_events) and end_idx < len(request_end_events):
+        while sorted_idx < len(sorted_events) and end_idx < len(
+            request_end_events
+        ):
             # Skip PRB events when comparing timestamps
             while (
                 sorted_idx < len(sorted_events)
@@ -375,7 +388,9 @@ class TrainDataLabeler:
 
         # Process events and label BSRs
         quantized_events = []
-        bsr_request_map = {}  # Map to store BSR index to request sequence number
+        bsr_request_map = (
+            {}
+        )  # Map to store BSR index to request sequence number
 
         # Process each event
         base_time = events[0]["timestamp"]
@@ -419,7 +434,12 @@ class TrainDataLabeler:
 
                 # Add first BSR pair with PRB count
                 bsr_pairs = [
-                    (last_bsr_before_request, first_bsr, prb_count, first_pair_end_idx)
+                    (
+                        last_bsr_before_request,
+                        first_bsr,
+                        prb_count,
+                        first_pair_end_idx,
+                    )
                 ]
 
                 # Add remaining BSR pairs in this request with their PRB counts
@@ -445,8 +465,15 @@ class TrainDataLabeler:
                 # Find next request start index
                 if seq_num < len(request_pairs):
                     next_request_start = min(request_pairs[seq_num][0], end_idx)
-                    for prev_bsr, curr_bsr, prb_count, curr_bsr_idx in bsr_pairs:
-                        is_before_next_request = curr_bsr_idx < next_request_start
+                    for (
+                        prev_bsr,
+                        curr_bsr,
+                        prb_count,
+                        curr_bsr_idx,
+                    ) in bsr_pairs:
+                        is_before_next_request = (
+                            curr_bsr_idx < next_request_start
+                        )
                         if is_before_next_request:
                             bsr_pairs_before_next_request.append(
                                 (prev_bsr, curr_bsr, prb_count, curr_bsr_idx)
@@ -460,7 +487,10 @@ class TrainDataLabeler:
 
             is_request_labeled = 0
             for bsr_pair in bsr_pairs_before_next_request:
-                if bsr_pair[0]["value"]["bytes"] < bsr_pair[1]["value"]["bytes"]:
+                if (
+                    bsr_pair[0]["value"]["bytes"]
+                    < bsr_pair[1]["value"]["bytes"]
+                ):
                     is_request_labeled = 1
                     quantized_events[bsr_pair[3]][5] = 1
                     request_labels[seq_num - 1] = 1
@@ -473,7 +503,10 @@ class TrainDataLabeler:
                 continue
 
             for bsr_pair in reversed(bsr_pairs_before_next_request):
-                if bsr_pair[0]["value"]["bytes"] >= bsr_pair[1]["value"]["bytes"]:
+                if (
+                    bsr_pair[0]["value"]["bytes"]
+                    >= bsr_pair[1]["value"]["bytes"]
+                ):
                     last_bsr_lower_bound = self.get_prev_bsr_value(
                         bsr_pair[0]["value"]["bytes"]
                     )
@@ -496,7 +529,8 @@ class TrainDataLabeler:
                     )
                     if (
                         bsr_pair[1]["value"]["bytes"] >= format_bsr_low_bound
-                        and bsr_pair[1]["value"]["bytes"] < format_bsr_high_bound
+                        and bsr_pair[1]["value"]["bytes"]
+                        < format_bsr_high_bound
                     ):
                         is_request_labeled = 1
                         quantized_events[bsr_pair[3]][5] = 1
@@ -662,13 +696,17 @@ def print_numpy_data_info(label_type, data):
         labeled_count = np.sum(ue_data[:, 5] == 1)
 
         print(f"Total events: {total_events}")
-        print(f"Event distribution: SR={sr_count}, BSR={bsr_count}, PRB={prb_count}")
+        print(
+            f"Event distribution: SR={sr_count}, BSR={bsr_count}, PRB={prb_count}"
+        )
         print(f"Labeled events: {labeled_count}")
 
         print("\nAll events details:")
         print("Type | Timestamp(ms) | BSR bytes | PRBs | Slot | Label")
         for event in ue_data:
-            event_type = "SR" if event[0] == 0 else "BSR" if event[0] == 1 else "PRB"
+            event_type = (
+                "SR" if event[0] == 0 else "BSR" if event[0] == 1 else "PRB"
+            )
             label = "1" if event[5] == 1 else "0"
             print(
                 f"{event_type:4} | {event[3]:11.2f} | {event[1]:9.0f} | {event[2]:4.0f} | {event[4]:4.0f} | {label:5}"
@@ -754,7 +792,9 @@ def main():
         description="Process log file and generate training data labels"
     )
     parser.add_argument("log_file", help="Path to the log file to process")
-    parser.add_argument("--output", help="Output file path for labeled data (.npy)")
+    parser.add_argument(
+        "--output", help="Output file path for labeled data (.npy)"
+    )
     parser.add_argument(
         "--threads", type=int, help="Number of threads to use", default=16
     )

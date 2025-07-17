@@ -44,7 +44,12 @@ from rich.table import Table
 
 from .steps.configuration import configure_metric_server_for_gnb
 from .steps.kpis import get_kpis, KPIs
-from .steps.stub import _stop_stub, GNB_STARTUP_TIMEOUT, handle_start_error, stop
+from .steps.stub import (
+    _stop_stub,
+    GNB_STARTUP_TIMEOUT,
+    handle_start_error,
+    stop,
+)
 
 _OMIT_VIAVI_FAILURE_LIST = ["authentication"]
 _FLAKY_ERROR_LIST = ["Error creating the pod", "Viavi API call timed out"]
@@ -407,7 +412,9 @@ def _test_viavi(
         gnb.Start(
             GNBStartInfo(
                 plmn=PLMN(mcc="001", mnc="01"),
-                fivegc_definition=FiveGCDefinition(amf_ip=amf_ip, amf_port=amf_port),
+                fivegc_definition=FiveGCDefinition(
+                    amf_ip=amf_ip, amf_port=amf_port
+                ),
                 start_info=StartInfo(
                     timeout=gnb_startup_timeout,
                     post_commands=(test_declaration.gnb_extra_commands,),
@@ -435,7 +442,9 @@ def _test_viavi(
 
     # Wait until end
     try:
-        info = viavi.wait_until_running_campaign_finishes(test_declaration.test_timeout)
+        info = viavi.wait_until_running_campaign_finishes(
+            test_declaration.test_timeout
+        )
         if info.status is not CampaignStatusEnum.PASS:
             pytest.fail(f"Viavi Test Failed: {info.message}")
         # Final stop
@@ -506,11 +515,15 @@ def check_metrics_criteria(
 
     # Check metrics
     viavi_kpis: ViaviKPIs = viavi.get_test_kpis()
-    kpis: KPIs = get_kpis(gnb, viavi_kpis=viavi_kpis, metrics_summary=metrics_summary)
+    kpis: KPIs = get_kpis(
+        gnb, viavi_kpis=viavi_kpis, metrics_summary=metrics_summary
+    )
 
     criteria_result: List[_ViaviResult] = []
     criteria_dl_brate_aggregate = check_criteria(
-        kpis.dl_brate_aggregate, test_configuration.expected_dl_bitrate, operator.gt
+        kpis.dl_brate_aggregate,
+        test_configuration.expected_dl_bitrate,
+        operator.gt,
     )
     criteria_result.append(
         _ViaviResult(
@@ -522,7 +535,9 @@ def check_metrics_criteria(
     )
 
     criteria_ul_brate_aggregate = check_criteria(
-        kpis.ul_brate_aggregate, test_configuration.expected_ul_bitrate, operator.gt
+        kpis.ul_brate_aggregate,
+        test_configuration.expected_ul_bitrate,
+        operator.gt,
     )
     criteria_result.append(
         _ViaviResult(
@@ -604,13 +619,16 @@ def check_metrics_criteria(
     # Check procedure table
     viavi_kpis.print_procedure_failures(_OMIT_VIAVI_FAILURE_LIST)
     criteria_procedure_table = (
-        viavi_kpis.get_number_of_procedure_failures(_OMIT_VIAVI_FAILURE_LIST) == 0
+        viavi_kpis.get_number_of_procedure_failures(_OMIT_VIAVI_FAILURE_LIST)
+        == 0
     )
     criteria_result.append(
         _ViaviResult(
             "Procedure table",
             0,
-            viavi_kpis.get_number_of_procedure_failures(_OMIT_VIAVI_FAILURE_LIST),
+            viavi_kpis.get_number_of_procedure_failures(
+                _OMIT_VIAVI_FAILURE_LIST
+            ),
             criteria_procedure_table,
         )
     )
@@ -632,7 +650,8 @@ def check_metrics_criteria(
             if not criteria.is_ok:
                 criteria_errors_str.append(criteria.criteria_name)
         pytest.fail(
-            "Test didn't pass the following criteria: " + ", ".join(criteria_errors_str)
+            "Test didn't pass the following criteria: "
+            + ", ".join(criteria_errors_str)
         )
 
 
@@ -642,7 +661,9 @@ def create_table(results: List[_ViaviResult], capsys):
     """
     table = Table(title="Viavi Results")
 
-    table.add_column("Criteria Name", justify="left", style="cyan", no_wrap=True)
+    table.add_column(
+        "Criteria Name", justify="left", style="cyan", no_wrap=True
+    )
     table.add_column("Expected", justify="right", style="magenta")
     table.add_column("Result", justify="right", style="magenta")
     table.add_column("Pass", justify="center", style="magenta")

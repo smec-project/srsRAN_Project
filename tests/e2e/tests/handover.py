@@ -91,7 +91,11 @@ def test_smoke_sequentially(
 @mark.zmq
 @mark.flaky(
     reruns=2,
-    only_rerun=["failed to start", "Attach timeout reached", "StatusCode.ABORTED"],
+    only_rerun=[
+        "failed to start",
+        "Attach timeout reached",
+        "StatusCode.ABORTED",
+    ],
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_zmq_handover_sequentially(
@@ -165,7 +169,9 @@ def _handover_sequentially(
                 ue_attach_info.ipv4,
             )
 
-            ping_task_array = ping_start(ue_attach_info_dict, fivegc, traffic_seconds)
+            ping_task_array = ping_start(
+                ue_attach_info_dict, fivegc, traffic_seconds
+            )
 
             for (
                 _from_position,
@@ -196,7 +202,11 @@ def _handover_sequentially(
 @mark.zmq
 @mark.flaky(
     reruns=2,
-    only_rerun=["failed to start", "Attach timeout reached", "StatusCode.ABORTED"],
+    only_rerun=[
+        "failed to start",
+        "Attach timeout reached",
+        "StatusCode.ABORTED",
+    ],
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
 def test_zmq_handover_parallel(
@@ -237,7 +247,9 @@ def test_zmq_handover_parallel(
             "Zigzag HO for all UEs + Pings running in background for all UEs",
         )
 
-        ping_task_array = ping_start(ue_attach_info_dict, fivegc, traffic_seconds)
+        ping_task_array = ping_start(
+            ue_attach_info_dict, fivegc, traffic_seconds
+        )
 
         for (
             from_position,
@@ -281,7 +293,10 @@ def _handover_multi_ues(
     Tuple[
         Dict[UEStub, UEAttachedInfo],
         Tuple[
-            Tuple[Tuple[float, float, float], Tuple[float, float, float], int, int], ...
+            Tuple[
+                Tuple[float, float, float], Tuple[float, float, float], int, int
+            ],
+            ...,
         ],
         int,
     ],
@@ -325,7 +340,10 @@ def _handover_multi_ues(
         # HO while pings
         movement_duration = (movement_steps + 1) * sleep_between_movement_steps
         movements: Tuple[
-            Tuple[Tuple[float, float, float], Tuple[float, float, float], int, int], ...
+            Tuple[
+                Tuple[float, float, float], Tuple[float, float, float], int, int
+            ],
+            ...,
         ] = (
             (
                 original_position,
@@ -387,11 +405,16 @@ def _do_ho(
 ):
     for ue_stub in ue_array:
         logging.info(
-            "Moving UE [%s] from %s to %s", id(ue_stub), from_position, to_position
+            "Moving UE [%s] from %s to %s",
+            id(ue_stub),
+            from_position,
+            to_position,
         )
 
     ho_task_array = [
-        ue_expect_handover(ue_stub, ((steps + 1) * sleep_between_steps) + extra_time)
+        ue_expect_handover(
+            ue_stub, ((steps + 1) * sleep_between_steps) + extra_time
+        )
         for ue_stub in ue_array
     ]
 

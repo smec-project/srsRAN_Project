@@ -14,7 +14,9 @@ except ImportError:
 try:
     import gitlab
 except ImportError:
-    print("Install Gitlab Python library: https://pypi.org/project/python-gitlab/")
+    print(
+        "Install Gitlab Python library: https://pypi.org/project/python-gitlab/"
+    )
     exit(1)
 
 DEFAULT_BUILD_ARGS = '-DCMAKE_BUILD_TYPE=Release -DFORCE_DEBUG_INFO=True -DENABLE_UHD=False -DENABLE_DPDK=True -DENABLE_ZEROMQ=False -DMARCH="x86-64-v4"'
@@ -109,7 +111,9 @@ def show_test_list():
         print()
 
 
-def run_test(args_definition: _ArgsDefinition, test_definition: _TestDefinition):
+def run_test(
+    args_definition: _ArgsDefinition, test_definition: _TestDefinition
+):
     timeout = args_definition.timeout if args_definition.timeout else 972800
     retina_log_level = "warning"
     branch = args_definition.branch
@@ -129,9 +133,13 @@ def run_test(args_definition: _ArgsDefinition, test_definition: _TestDefinition)
 
     PYARGS = f'--viavi-manual-campaign-filename "{test_definition.campaign_filename}" --viavi-manual-test-name "{test_definition.test_name}" --viavi-manual-test-timeout {timeout} --retina-pod-timeout 900'
     if args_definition.gnb_extra:
-        PYARGS += f' --viavi-manual-extra-gnb-arguments "{args_definition.gnb_extra}"'
+        PYARGS += (
+            f' --viavi-manual-extra-gnb-arguments "{args_definition.gnb_extra}"'
+        )
 
-    RETINA_ARGS = "gnb.all.pcap=True gnb.all.rlc_enable=True gnb.all.rlc_rb_type=srb"
+    RETINA_ARGS = (
+        "gnb.all.pcap=True gnb.all.rlc_enable=True gnb.all.rlc_rb_type=srb"
+    )
 
     variables = [
         {"key": "INFRASTRUCTURE_TAG", "value": INFRASTRUCTURE_TAG},
