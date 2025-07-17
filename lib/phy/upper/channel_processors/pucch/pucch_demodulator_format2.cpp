@@ -115,7 +115,7 @@ void pucch_demodulator_format2::get_data_re_ests(const resource_grid_reader&    
   prb_mask.fill(0, config.nof_prb, true);
 
   // Prepare RE mask.
-  bounded_bitset<MAX_RB* NRE> re_mask = prb_mask.kronecker_product<NRE>(format2_prb_re_mask);
+  bounded_bitset<MAX_RB * NRE> re_mask = prb_mask.kronecker_product<NRE>(format2_prb_re_mask);
 
   for (unsigned i_port = 0, i_port_end = config.rx_ports.size(); i_port != i_port_end; ++i_port) {
     // Get a view of the data RE destination buffer for a single Rx port.

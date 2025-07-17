@@ -1629,7 +1629,7 @@ void ue_fallback_scheduler::fill_ul_srb_grant(ue&                               
     // It is a new tx.
     h_ul = u.get_pcell().harqs.alloc_ul_harq(pdcch_slot + k2 + cell_cfg.ntn_cs_koffset, expert_cfg.max_nof_harq_retxs);
   }
-  
+
   uint8_t                  rv                  = u.get_pcell().get_pusch_rv(h_ul->nof_retxs());
   static constexpr uint8_t default_tpc_command = 1U;
   build_dci_f0_0_c_rnti(pdcch.dci,

@@ -36,7 +36,15 @@ from google.protobuf.wrappers_pb2 import StringValue, UInt32Value
 from retina.client.exception import ErrorReportedByAgent
 from retina.launcher.artifacts import RetinaTestData
 from retina.protocol import RanStub
-from retina.protocol.base_pb2 import Metrics, PingRequest, PingResponse, PLMN, StartInfo, StopResponse, UEDefinition
+from retina.protocol.base_pb2 import (
+    Metrics,
+    PingRequest,
+    PingResponse,
+    PLMN,
+    StartInfo,
+    StopResponse,
+    UEDefinition,
+)
 from retina.protocol.exit_codes import exit_code_to_message
 from retina.protocol.fivegc_pb2 import FiveGCStartInfo, IPerfResponse
 from retina.protocol.fivegc_pb2_grpc import FiveGCStub
@@ -57,7 +65,9 @@ from retina.protocol.ue_pb2_grpc import UEStub
 
 RF_MAX_TIMEOUT: int = 5 * 60  # Time enough in RF when loading a new image in the sdr
 UE_STARTUP_TIMEOUT: int = RF_MAX_TIMEOUT
-GNB_STARTUP_TIMEOUT: int = 2  # GNB delay (we wait x seconds and check it's still alive). UE later and has a big timeout
+GNB_STARTUP_TIMEOUT: int = (
+    2  # GNB delay (we wait x seconds and check it's still alive). UE later and has a big timeout
+)
 FIVEGC_STARTUP_TIMEOUT: int = RF_MAX_TIMEOUT
 ATTACH_TIMEOUT: int = 90
 INTER_UE_START_PERIOD: int = 0
@@ -142,7 +152,9 @@ def start_network(
         else:
             # Set PLMN to HPLMN of first UE
             plmn = ue_hplmn
-            logging.info("Setting PLMN to HPLMN of first UE. MCC=%s MNC=%s", plmn.mcc, plmn.mnc)
+            logging.info(
+                "Setting PLMN to HPLMN of first UE. MCC=%s MNC=%s", plmn.mcc, plmn.mnc
+            )
         fivegc.AddUESubscriber(ue_def.subscriber)
         if ue_def.zmq_ip is not None:
             ue_def_for_gnb = ue_def
@@ -197,15 +209,19 @@ def ue_start_and_attach(
 
     # Attach in parallel
     ue_attach_task_dict: Dict[UEStub, grpc.Future] = {
-        ue_stub: ue_stub.WaitUntilAttached.future(UInt32Value(value=attach_timeout)) for ue_stub in ue_array
+        ue_stub: ue_stub.WaitUntilAttached.future(UInt32Value(value=attach_timeout))
+        for ue_stub in ue_array
     }
     for ue_stub, task in ue_attach_task_dict.items():
-        task.add_done_callback(lambda _task, _ue_stub=ue_stub: _log_attached_ue(_task, _ue_stub))
+        task.add_done_callback(
+            lambda _task, _ue_stub=ue_stub: _log_attached_ue(_task, _ue_stub)
+        )
 
     ue_attach_info_dict: Dict[UEStub, UEAttachedInfo] = {}
     with suppress(grpc.RpcError):
         ue_attach_info_dict = {
-            ue_stub: task.result() for ue_stub, task in ue_attach_task_dict.items()  # Waiting for attach
+            ue_stub: task.result()
+            for ue_stub, task in ue_attach_task_dict.items()  # Waiting for attach
         }
 
     if not ue_attach_info_dict:
@@ -242,7 +258,12 @@ def _log_attached_ue(future: grpc.Future, ue_stub: UEStub):
         )
 
 
-def ping(ue_attach_info_dict: Dict[UEStub, UEAttachedInfo], fivegc: FiveGCStub, ping_count, time_step: int = 0):
+def ping(
+    ue_attach_info_dict: Dict[UEStub, UEAttachedInfo],
+    fivegc: FiveGCStub,
+    ping_count,
+    time_step: int = 0,
+):
     """
     Ping command between an UE and a 5GC
     """
@@ -251,7 +272,10 @@ def ping(ue_attach_info_dict: Dict[UEStub, UEAttachedInfo], fivegc: FiveGCStub, 
 
 
 def ping_start(
-    ue_attach_info_dict: Dict[UEStub, UEAttachedInfo], fivegc: FiveGCStub, ping_count, time_step: float = 0
+    ue_attach_info_dict: Dict[UEStub, UEAttachedInfo],
+    fivegc: FiveGCStub,
+    ping_count,
+    time_step: float = 0,
 ) -> List[grpc.Future]:
     """
     Ping command between an UE and a 5GC
@@ -265,11 +289,17 @@ def ping_start(
             PingRequest(address=ue_attached_info.ipv4_gateway, count=ping_count)
         )
         ue_to_fivegc.add_done_callback(
-            lambda _task, _msg=f"[{ue_attached_info.ipv4}] UE -> 5GC": _print_ping_result(_msg, _task)
+            lambda _task, _msg=f"[{ue_attached_info.ipv4}] UE -> 5GC": _print_ping_result(
+                _msg, _task
+            )
         )
-        fivegc_to_ue: grpc.Future = fivegc.Ping.future(PingRequest(address=ue_attached_info.ipv4, count=ping_count))
+        fivegc_to_ue: grpc.Future = fivegc.Ping.future(
+            PingRequest(address=ue_attached_info.ipv4, count=ping_count)
+        )
         fivegc_to_ue.add_done_callback(
-            lambda _task, _msg=f"[{ue_attached_info.ipv4}] 5GC -> UE": _print_ping_result(_msg, _task)
+            lambda _task, _msg=f"[{ue_attached_info.ipv4}] 5GC -> UE": _print_ping_result(
+                _msg, _task
+            )
         )
         ping_task_array.append(ue_to_fivegc)
         ping_task_array.append(fivegc_to_ue)
@@ -408,7 +438,9 @@ def iperf_start(
     """
 
     iperf_request = IPerfRequest(
-        server=fivegc.StartIPerfService(StringValue(value=ue_attached_info.ipv4_gateway)),
+        server=fivegc.StartIPerfService(
+            StringValue(value=ue_attached_info.ipv4_gateway)
+        ),
         duration=duration,
         direction=direction,
         proto=protocol,
@@ -466,7 +498,8 @@ def iperf_wait_until_finish(
     iperf_success = True
     if (
         iperf_request.direction in (IPerfDir.DOWNLINK, IPerfDir.BIDIRECTIONAL)
-        and iperf_data.downlink.bits_per_second <= bitrate_threshold_ratio * iperf_request.bitrate
+        and iperf_data.downlink.bits_per_second
+        <= bitrate_threshold_ratio * iperf_request.bitrate
     ):
         logging.warning(
             "Downlink bitrate too low. Requested: %s - Measured: %s",
@@ -476,7 +509,8 @@ def iperf_wait_until_finish(
         iperf_success = False
     if (
         iperf_request.direction in (IPerfDir.UPLINK, IPerfDir.BIDIRECTIONAL)
-        and iperf_data.uplink.bits_per_second <= bitrate_threshold_ratio * iperf_request.bitrate
+        and iperf_data.uplink.bits_per_second
+        <= bitrate_threshold_ratio * iperf_request.bitrate
     ):
         logging.warning(
             "Uplink bitrate too low. Requested: %s - Measured: %s",
@@ -523,7 +557,10 @@ def ue_reestablishment_parallel(
     Reestablishment multiple UEs in from already running gnb and 5gc
     """
 
-    reest_task_array = [_ue_reestablishment_future(ue_stub, reestablishment_interval) for ue_stub in ue_array]
+    reest_task_array = [
+        _ue_reestablishment_future(ue_stub, reestablishment_interval)
+        for ue_stub in ue_array
+    ]
     if not all((task.result().status for task in reest_task_array)):
         pytest.fail("Reestablishment failed.")
 
@@ -533,8 +570,12 @@ def _ue_reestablishment_future(
     reestablishment_interval: int,
 ) -> grpc.Future:
 
-    reest_future: grpc.Future = ue_stub.Reestablishment.future(UInt32Value(value=reestablishment_interval))
-    reest_future.add_done_callback(lambda _task, _ue_stub=ue_stub: _log_reestablishment(_task, _ue_stub))
+    reest_future: grpc.Future = ue_stub.Reestablishment.future(
+        UInt32Value(value=reestablishment_interval)
+    )
+    reest_future.add_done_callback(
+        lambda _task, _ue_stub=ue_stub: _log_reestablishment(_task, _ue_stub)
+    )
     return reest_future
 
 
@@ -542,17 +583,34 @@ def _log_reestablishment(future: grpc.Future, ue_stub: UEStub):
     try:
         result: ReestablishmentInfo = future.result()
         log_fn = logging.info if result.status else logging.error
-        log_fn("Reestablishment UE [%s]:\n%s", id(ue_stub), MessageToString(result, indent=2))
+        log_fn(
+            "Reestablishment UE [%s]:\n%s",
+            id(ue_stub),
+            MessageToString(result, indent=2),
+        )
     except grpc.RpcError as err:
-        logging.error("Reestablishment UE [%s] failed: %s", id(ue_stub), ErrorReportedByAgent(err))
+        logging.error(
+            "Reestablishment UE [%s] failed: %s", id(ue_stub), ErrorReportedByAgent(err)
+        )
 
 
-def ue_move(ue_stub: UEStub, x_coordinate: float, y_coordinate: float = 0, z_coordinate: float = 0):
+def ue_move(
+    ue_stub: UEStub,
+    x_coordinate: float,
+    y_coordinate: float = 0,
+    z_coordinate: float = 0,
+):
     """
     Simulated UEs can change its position
     """
     ue_stub.Move(Position(x=x_coordinate, y=y_coordinate, z=z_coordinate))
-    logging.info("UE [%s] moved to position %s, %s, %s", id(ue_stub), x_coordinate, y_coordinate, z_coordinate)
+    logging.info(
+        "UE [%s] moved to position %s, %s, %s",
+        id(ue_stub),
+        x_coordinate,
+        y_coordinate,
+        z_coordinate,
+    )
 
 
 def ue_expect_handover(ue_stub: UEStub, timeout: int) -> grpc.Future:
@@ -560,7 +618,9 @@ def ue_expect_handover(ue_stub: UEStub, timeout: int) -> grpc.Future:
     Creates a future object that will finish when a HO takes places or when the timeout is reached
     """
     ho_future: grpc.Future = ue_stub.ExpectHandover.future(UInt32Value(value=timeout))
-    ho_future.add_done_callback(lambda _task, _ue_stub=ue_stub: _log_handover(_task, _ue_stub))
+    ho_future.add_done_callback(
+        lambda _task, _ue_stub=ue_stub: _log_handover(_task, _ue_stub)
+    )
     return ho_future
 
 
@@ -570,7 +630,9 @@ def _log_handover(future: grpc.Future, ue_stub: UEStub):
         log_fn = logging.info if result.status else logging.error
         log_fn("Handover UE [%s]:\n%s", id(ue_stub), MessageToString(result, indent=2))
     except grpc.RpcError as err:
-        logging.error("Handover UE [%s] failed: %s", id(ue_stub), ErrorReportedByAgent(err))
+        logging.error(
+            "Handover UE [%s] failed: %s", id(ue_stub), ErrorReportedByAgent(err)
+        )
 
 
 def ue_validate_no_reattaches(ue_stub: UEStub):
@@ -579,19 +641,35 @@ def ue_validate_no_reattaches(ue_stub: UEStub):
     """
     messages: RrcMessages = ue_stub.GetMessages(Empty())
     if messages.nof_setup > 1:
-        logging.error("UE [%s] had multiples rrc setups:\n%s", id(ue_stub), MessageToString(messages, indent=2))
+        logging.error(
+            "UE [%s] had multiples rrc setups:\n%s",
+            id(ue_stub),
+            MessageToString(messages, indent=2),
+        )
 
 
-def validate_ue_registered_via_ims(ue_stub_array: Sequence[UEStub], core: FiveGCStub) -> None:
+def validate_ue_registered_via_ims(
+    ue_stub_array: Sequence[UEStub], core: FiveGCStub
+) -> None:
     """
     Fails if the UEs are not registered in IMS
     """
     expected_subscriber_array = tuple(
-        sorted([ue_stub.GetDefinition(Empty()).subscriber.imsi for ue_stub in ue_stub_array])
+        sorted(
+            [
+                ue_stub.GetDefinition(Empty()).subscriber.imsi
+                for ue_stub in ue_stub_array
+            ]
+        )
     )
     logging.info("IMSI of expected UEs in IMS: %s", expected_subscriber_array)
     registered_subscriber_array = tuple(
-        sorted([subscriber.imsi for subscriber in core.GetImsRegisteredUESubscriberArray(Empty()).value])
+        sorted(
+            [
+                subscriber.imsi
+                for subscriber in core.GetImsRegisteredUESubscriberArray(Empty()).value
+            ]
+        )
     )
     logging.info("IMSI of registered UEs in IMS: %s", registered_subscriber_array)
     if expected_subscriber_array != registered_subscriber_array:
@@ -627,7 +705,9 @@ def stop(
         error_msg_array.append(error_message)
 
     if gnb is not None:
-        error_message, _ = _stop_stub(gnb, "GNB", retina_data, gnb_stop_timeout, log_search, warning_as_errors)
+        error_message, _ = _stop_stub(
+            gnb, "GNB", retina_data, gnb_stop_timeout, log_search, warning_as_errors
+        )
         error_msg_array.append(error_message)
     if fivegc is not None:
         error_message, _ = _stop_stub(
@@ -645,24 +725,36 @@ def stop(
     if error_msg_array:
         pytest.fail(
             f"Stop stage. {error_msg_array[0]}"
-            + (("\nFull list of errors:\n - " + "\n - ".join(error_msg_array)) if len(error_msg_array) > 1 else "")
+            + (
+                ("\nFull list of errors:\n - " + "\n - ".join(error_msg_array))
+                if len(error_msg_array) > 1
+                else ""
+            )
         )
 
     # Metrics after Stop
     metrics_msg_array = []
     for index, ue_stub in enumerate(ue_array):
-        metrics_msg_array.append(_get_metrics_msg(ue_stub, f"UE_{index+1}", fail_if_kos=fail_if_kos))
+        metrics_msg_array.append(
+            _get_metrics_msg(ue_stub, f"UE_{index+1}", fail_if_kos=fail_if_kos)
+        )
     if gnb is not None:
         metrics_msg_array.append(_get_metrics_msg(gnb, "GNB", fail_if_kos=fail_if_kos))
     if fivegc is not None:
-        metrics_msg_array.append(_get_metrics_msg(fivegc, "5GC", fail_if_kos=fail_if_kos))
+        metrics_msg_array.append(
+            _get_metrics_msg(fivegc, "5GC", fail_if_kos=fail_if_kos)
+        )
 
     # Fail if metric errors
     metrics_msg_array = list(filter(bool, metrics_msg_array))
     if metrics_msg_array:
         pytest.fail(
             f"Metrics validation. {metrics_msg_array[0]}"
-            + (("\nFull list of errors:\n - " + "\n - ".join(metrics_msg_array)) if len(metrics_msg_array) > 1 else "")
+            + (
+                ("\nFull list of errors:\n - " + "\n - ".join(metrics_msg_array))
+                if len(metrics_msg_array) > 1
+                else ""
+            )
         )
 
 
@@ -691,7 +783,11 @@ def ue_stop(
     if error_msg_array:
         pytest.fail(
             f"UE Stop. {error_msg_array[0]}"
-            + (("\nFull list of errors:\n - " + "\n - ".join(error_msg_array)) if len(error_msg_array) > 1 else "")
+            + (
+                ("\nFull list of errors:\n - " + "\n - ".join(error_msg_array))
+                if len(error_msg_array) > 1
+                else ""
+            )
         )
 
 
@@ -716,9 +812,7 @@ def _stop_stub(
 
         if stop_info.exit_code:
             retina_data.download_artifacts = True
-            error_msg = (
-                f"{name} crashed with exit code {stop_info.exit_code} ({exit_code_to_message(stop_info.exit_code)}). "
-            )
+            error_msg = f"{name} crashed with exit code {stop_info.exit_code} ({exit_code_to_message(stop_info.exit_code)}). "
 
         if log_search:
             log_msg = f"{name} has {stop_info.error_count} errors and {stop_info.warning_count} warnings. "

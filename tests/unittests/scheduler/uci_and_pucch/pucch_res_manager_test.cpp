@@ -534,8 +534,7 @@ public:
 protected:
   struct dummy_ue {
     dummy_ue(rnti_t rnti, const cell_configuration& cell_cfg_common_, const serving_cell_config& serv_cell_cfg_) :
-      cnrti{rnti},
-      ue_cell_cfg{rnti, cell_cfg_common_, serv_cell_cfg_} {
+      cnrti{rnti}, ue_cell_cfg{rnti, cell_cfg_common_, serv_cell_cfg_} {
 
       };
 

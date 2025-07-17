@@ -114,10 +114,21 @@ def configure_test_parameters(
         if "metrics-server" in node_name:
             metrics_server = retina_manager.get_testbed_info()["generic"][node_name]
 
-    if metrics_server is not None and metrics_server.metadata.get("ip", None) is not None:
-        retina_data.test_config["gnb"]["parameters"]["metrics_hostname"] = metrics_server.metadata["ip"]
-        retina_data.test_config["gnb"]["parameters"]["metrics_port"] = metrics_server.port
-        logging.info("Metrics Server in %s:%s will be used for this test.", metrics_server.address, metrics_server.port)
+    if (
+        metrics_server is not None
+        and metrics_server.metadata.get("ip", None) is not None
+    ):
+        retina_data.test_config["gnb"]["parameters"]["metrics_hostname"] = (
+            metrics_server.metadata["ip"]
+        )
+        retina_data.test_config["gnb"]["parameters"][
+            "metrics_port"
+        ] = metrics_server.port
+        logging.info(
+            "Metrics Server in %s:%s will be used for this test.",
+            metrics_server.address,
+            metrics_server.port,
+        )
 
     logging.info("Test config: \n%s", pformat(retina_data.test_config))
     retina_manager.parse_configuration(retina_data.test_config)
@@ -194,7 +205,9 @@ def get_minimum_sample_rate_for_bandwidth(bandwidth: int) -> int:
 
 
 def configure_metric_server_for_gnb(
-    retina_manager: RetinaTestManager, retina_data: RetinaTestData, metrics_server: MetricServerInfo
+    retina_manager: RetinaTestManager,
+    retina_data: RetinaTestData,
+    metrics_server: MetricServerInfo,
 ):
     """
     Set parameters to set up a metrics server
@@ -205,7 +218,9 @@ def configure_metric_server_for_gnb(
     if "parameters" not in retina_data.test_config["gnb"]:
         retina_data.test_config["gnb"]["parameters"] = {}
 
-    retina_data.test_config["gnb"]["parameters"]["metrics_hostname"] = metrics_server.address
+    retina_data.test_config["gnb"]["parameters"][
+        "metrics_hostname"
+    ] = metrics_server.address
     retina_data.test_config["gnb"]["parameters"]["metrics_port"] = metrics_server.port
 
     logging.info("Test config: \n%s", pformat(retina_data.test_config))

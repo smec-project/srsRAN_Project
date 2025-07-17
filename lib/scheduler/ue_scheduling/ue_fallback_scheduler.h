@@ -26,8 +26,8 @@
 #include "../support/sch_pdu_builder.h"
 #include "ue_repository.h"
 #include "srsran/scheduler/scheduler_configurator.h"
-#include <queue>
 #include <iostream>
+#include <queue>
 
 namespace srsran {
 

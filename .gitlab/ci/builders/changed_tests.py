@@ -55,7 +55,11 @@ def _ctest_dict_to_df(data):
     entries = []
     test_num = 1
     for test_info in data["tests"]:
-        entry = {"filename": test_info["command"][0], "name": test_info["name"], "number": test_num}
+        entry = {
+            "filename": test_info["command"][0],
+            "name": test_info["name"],
+            "number": test_num,
+        }
         entries.append(entry)
         test_num = test_num + 1
     df = pd.DataFrame(entries)
@@ -65,19 +69,39 @@ def _ctest_dict_to_df(data):
 def _main():
     parser = ArgumentParser()
     parser.add_argument(
-        "-b", "--build-dir", required=True, metavar="BUILD_DIR", help="build directory from which ctest will be run"
+        "-b",
+        "--build-dir",
+        required=True,
+        metavar="BUILD_DIR",
+        help="build directory from which ctest will be run",
     )
     parser.add_argument(
-        "-i", "--input-fingerprint", default=None, metavar="IN_CSV", help="compare against fingerprints in FILE"
+        "-i",
+        "--input-fingerprint",
+        default=None,
+        metavar="IN_CSV",
+        help="compare against fingerprints in FILE",
     )
     parser.add_argument(
-        "-o", "--output-fingerprint", default=None, metavar="OUT_CSV", help="store current fingerprints to FILE"
+        "-o",
+        "--output-fingerprint",
+        default=None,
+        metavar="OUT_CSV",
+        help="store current fingerprints to FILE",
     )
     parser.add_argument(
-        "-n", "--names", action="store_true", default=False, help="print test names instead of index to stdout"
+        "-n",
+        "--names",
+        action="store_true",
+        default=False,
+        help="print test names instead of index to stdout",
     )
     parser.add_argument(
-        "-d", "--distinguishing-feature", choices=KEY_TYPES, default="md5", help="distinguishing feature for comparison"
+        "-d",
+        "--distinguishing-feature",
+        choices=KEY_TYPES,
+        default="md5",
+        help="distinguishing feature for comparison",
     )
 
     args = parser.parse_args()
@@ -86,17 +110,23 @@ def _main():
     all_info_dict = _get_file_info(all_exec_list)
     all_info_df = pd.DataFrame(all_info_dict)
     if args.output_fingerprint is not None:
-        all_info_df.to_csv(args.output_fingerprint, index=False, header=True, quoting=QUOTE_ALL)
+        all_info_df.to_csv(
+            args.output_fingerprint, index=False, header=True, quoting=QUOTE_ALL
+        )
     if args.input_fingerprint is not None:
         old_info_df = pd.read_csv(args.input_fingerprint, header=0, quoting=QUOTE_ALL)
-        full_info_df = all_info_df.merge(old_info_df, how="left", on="filename", suffixes=("", "_old"))
+        full_info_df = all_info_df.merge(
+            old_info_df, how="left", on="filename", suffixes=("", "_old")
+        )
         if args.distinguishing_feature == "md5":
             full_info_df = full_info_df[
-                (full_info_df["md5_old"].isna()) | (full_info_df["md5"] != full_info_df["md5_old"])
+                (full_info_df["md5_old"].isna())
+                | (full_info_df["md5"] != full_info_df["md5_old"])
             ]
         elif args.distinguishing_feature == "mtime":
             full_info_df = full_info_df[
-                (full_info_df["mtime_old"].isna()) | (full_info_df["mtime"] - full_info_df["mtime_old"] > 0.01)
+                (full_info_df["mtime_old"].isna())
+                | (full_info_df["mtime"] - full_info_df["mtime_old"] > 0.01)
             ]
         ctest_dict = _get_ctests(args.build_dir)
         ctest_df = _ctest_dict_to_df(ctest_dict)

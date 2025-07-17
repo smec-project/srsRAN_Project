@@ -24,17 +24,17 @@
 
 #include "../slicing/slice_ue_repository.h"
 #include "scheduler_policy.h"
-#include <map>
-#include <thread>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <unistd.h>  // For close()
-#include <fcntl.h>  // For non-blocking socket
-#include <sstream>  // For std::stringstream
-#include <iomanip>  // For std::hex
-#include <mutex>
 #include <atomic>
+#include <fcntl.h> // For non-blocking socket
+#include <iomanip> // For std::hex
+#include <map>
+#include <mutex>
+#include <netinet/in.h>
+#include <sstream> // For std::stringstream
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h> // For close()
 
 namespace srsran {
 
@@ -64,7 +64,7 @@ private:
   /// Coefficient used to compute exponential moving average.
   const double exp_avg_alpha = 0.01;
 
-  static std::mutex priorities_mutex;
+  static std::mutex                 priorities_mutex;
   static std::map<unsigned, double> ul_priorities;
 
   /// Holds the information needed to compute priority of a UE in a priority queue.
@@ -207,12 +207,12 @@ private:
   void handle_priority_messages();
   bool setup_server_socket();
   void handle_client_connection(int client_sock);
-  
+
   // Socket related members
-  int server_sockfd;
-  int client_sockfd;
-  std::thread socket_thread;
-  bool running;
+  int                  server_sockfd;
+  int                  client_sockfd;
+  std::thread          socket_thread;
+  bool                 running;
   static constexpr int PRIORITY_PORT = 5555;
 };
 

@@ -77,7 +77,15 @@ def test_rf_n300_config(
     Run gnb with N300 example config and validate it doesn't crash.
     """
     extra_config = "ru_sdr --clock external --sync external"
-    run_config(retina_manager, retina_data, fivegc, gnb, timeout, N300_CONFIG_FILE, extra_config)
+    run_config(
+        retina_manager,
+        retina_data,
+        fivegc,
+        gnb,
+        timeout,
+        N300_CONFIG_FILE,
+        extra_config,
+    )
 
 
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -100,7 +108,9 @@ def run_config(
         retina_data.test_config = {
             "gnb": {
                 "templates": {
-                    "main": str(Path(__file__).joinpath(f"../../../../{config_file}").resolve()),
+                    "main": str(
+                        Path(__file__).joinpath(f"../../../../{config_file}").resolve()
+                    ),
                     "cu": tmp_file.name,
                     "du": tmp_file.name,
                     "ru": tmp_file.name,

@@ -42,7 +42,7 @@ public:
   du_power_controller& get_power_controller() override { return *this; }
 
   // See interface for documentation.
-  void start() override{};
+  void start() override {};
 
   // See interface for documentation.
   void stop() override;

@@ -227,8 +227,8 @@ void port_channel_estimator_average_impl::compute_hop(srsran::channel_estimate& 
   std::optional<float> cfo_hop = preprocess_pilots_and_cfo(
       pilots, pattern.symbols, cfg.scs, first_symbol, last_symbol, hop_offset, layer0, layer0 + 1);
   if (cfo_hop.has_value()) {
-    cfo_normalized = evaluate_or(
-        cfo_normalized, cfo_hop.value(), [](float a, float b) { return (a + b) / 2.0F; }, cfo_hop.value());
+    cfo_normalized =
+        evaluate_or(cfo_normalized, cfo_hop.value(), [](float a, float b) { return (a + b) / 2.0F; }, cfo_hop.value());
   }
 
   // Average and apply DM-RS-to-data gain.
@@ -394,7 +394,7 @@ static unsigned extract_layer_hop_rx_pilots(dmrs_symbol_list&                   
   const bounded_bitset<MAX_RB>& hop_rb_mask = (hop == 0) ? pattern.rb_mask : pattern.rb_mask2;
 
   // Prepare RE mask, common for all symbols carrying DM-RS.
-  bounded_bitset<MAX_RB* NRE> re_mask = hop_rb_mask.kronecker_product<NRE>(pattern.re_pattern);
+  bounded_bitset<MAX_RB * NRE> re_mask = hop_rb_mask.kronecker_product<NRE>(pattern.re_pattern);
 
   unsigned symbol_index      = ((hop == 1) && pattern.hopping_symbol_index.has_value())
                                    ? pattern.hopping_symbol_index.value()

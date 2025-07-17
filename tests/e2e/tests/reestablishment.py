@@ -51,7 +51,12 @@ from .steps.stub import (
     ue_validate_no_reattaches,
 )
 
-_ONLY_RERUN = ["failed to start", "Attach timeout reached", "StatusCode.ABORTED", "socket is already closed"]
+_ONLY_RERUN = [
+    "failed to start",
+    "Attach timeout reached",
+    "StatusCode.ABORTED",
+    "socket is already closed",
+]
 
 
 @mark.zmq
@@ -142,7 +147,10 @@ def _reestablishment_sequentially_ping(
     traffic_duration = 15
     reestablishment_interval = 5
 
-    for reest_ue_attach_info_dict, other_ue_attach_info_dict in _iterator_over_attached_ues(
+    for (
+        reest_ue_attach_info_dict,
+        other_ue_attach_info_dict,
+    ) in _iterator_over_attached_ues(
         retina_manager=retina_manager,
         retina_data=retina_data,
         ue_array=ue_array,
@@ -162,7 +170,9 @@ def _reestablishment_sequentially_ping(
     ):
         # Launch pings
         ping_task_array = ping_start(
-            {**reest_ue_attach_info_dict, **other_ue_attach_info_dict}, fivegc, traffic_duration
+            {**reest_ue_attach_info_dict, **other_ue_attach_info_dict},
+            fivegc,
+            traffic_duration,
         )
 
         # Trigger reestablishments
@@ -212,7 +222,10 @@ def test_zmq_reestablishment_sequentially_full_rate(
     traffic_duration = 15
     reestablishment_interval = 5
 
-    for reest_ue_attach_info_dict, other_ue_attach_info_dict in _iterator_over_attached_ues(
+    for (
+        reest_ue_attach_info_dict,
+        other_ue_attach_info_dict,
+    ) in _iterator_over_attached_ues(
         retina_manager=retina_manager,
         retina_data=retina_data,
         ue_array=ue_8,
@@ -234,9 +247,20 @@ def test_zmq_reestablishment_sequentially_full_rate(
         iperf_dict = tuple(
             (
                 ue_attached_info,
-                *iperf_start(ue_stub, ue_attached_info, fivegc, protocol, direction, traffic_duration, 0),
+                *iperf_start(
+                    ue_stub,
+                    ue_attached_info,
+                    fivegc,
+                    protocol,
+                    direction,
+                    traffic_duration,
+                    0,
+                ),
             )
-            for ue_stub, ue_attached_info in {**reest_ue_attach_info_dict, **other_ue_attach_info_dict}.items()
+            for ue_stub, ue_attached_info in {
+                **reest_ue_attach_info_dict,
+                **other_ue_attach_info_dict,
+            }.items()
         )
 
         # Trigger reestablishments
@@ -299,8 +323,13 @@ def test_zmq_reestablishment_parallel(
     ) as ue_attach_info_dict:
 
         for i in range(number_of_reestablishments):
-            logging.info("Starting Reestablishment for all UEs + Traffic running in background. Iteration %s", i + 1)
-            ping_task_array = ping_start(ue_attach_info_dict, fivegc, reestablishment_time)
+            logging.info(
+                "Starting Reestablishment for all UEs + Traffic running in background. Iteration %s",
+                i + 1,
+            )
+            ping_task_array = ping_start(
+                ue_attach_info_dict, fivegc, reestablishment_time
+            )
             ue_reestablishment_parallel(ue_8, reestablishment_time)
             ping_wait_until_finish(ping_task_array)
 
@@ -373,7 +402,15 @@ def test_zmq_reestablishment_parallel_full_rate(
             iperf_dict = tuple(
                 (
                     ue_attached_info,
-                    *iperf_start(ue_stub, ue_attached_info, fivegc, protocol, direction, reestablishment_time, 0),
+                    *iperf_start(
+                        ue_stub,
+                        ue_attached_info,
+                        fivegc,
+                        protocol,
+                        direction,
+                        reestablishment_time,
+                        0,
+                    ),
                 )
                 for ue_stub, ue_attached_info in ue_attach_info_dict.items()
             )
@@ -383,7 +420,13 @@ def test_zmq_reestablishment_parallel_full_rate(
 
         logging.info("Starting traffic after all reestablishments have been completed")
         iperf_parallel(
-            ue_attach_info_dict, fivegc, protocol, direction, reestablishment_time, 0, parallel_iperfs=len(ue_8)
+            ue_attach_info_dict,
+            fivegc,
+            protocol,
+            direction,
+            reestablishment_time,
+            0,
+            parallel_iperfs=len(ue_8),
         )
 
 
@@ -405,7 +448,9 @@ def _iterator_over_attached_ues(
     noise_spd: int,
     log_ip_level: str,
     warning_as_errors: bool = True,
-) -> Generator[Tuple[Dict[UEStub, UEAttachedInfo], Dict[UEStub, UEAttachedInfo]], None, None]:
+) -> Generator[
+    Tuple[Dict[UEStub, UEAttachedInfo], Dict[UEStub, UEAttachedInfo]], None, None
+]:
 
     with _test_reestablishments(
         retina_manager=retina_manager,
@@ -485,7 +530,12 @@ def _test_reestablishments(
         always_download_artifacts=always_download_artifacts,
     )
 
-    start_network(ue_array, gnb, fivegc, gnb_post_cmd=("log --cu_level=debug", "log --mac_level=debug"))
+    start_network(
+        ue_array,
+        gnb,
+        fivegc,
+        gnb_post_cmd=("log --cu_level=debug", "log --mac_level=debug"),
+    )
 
     ue_attach_info_dict = ue_start_and_attach(ue_array, gnb, fivegc)
 

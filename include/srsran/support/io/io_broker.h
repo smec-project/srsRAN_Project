@@ -111,10 +111,8 @@ public:
   /// \param[in] err_handler Callback that handles error events.
   /// \return An RAII handle to the registered file descriptor. On destruction, the fd is automatically deregistered
   /// from the io_broker.
-  [[nodiscard]] virtual subscriber register_fd(
-      int              fd,
-      recv_callback_t  handler,
-      error_callback_t err_handler = [](error_code) {}) = 0;
+  [[nodiscard]] virtual subscriber
+  register_fd(int fd, recv_callback_t handler, error_callback_t err_handler = [](error_code) {}) = 0;
 
 private:
   /// \brief Unregister a file descriptor from the IO interface.

@@ -25,8 +25,8 @@
 #include "../logging/scheduler_metrics_handler.h"
 #include "../srs/srs_scheduler.h"
 #include "../uci_scheduling/uci_scheduler_impl.h"
-#include "srsran/support/memory_pool/unbounded_object_pool.h"
 #include "scheduler_metrics_sender.h"
+#include "srsran/support/memory_pool/unbounded_object_pool.h"
 
 using namespace srsran;
 
@@ -559,12 +559,7 @@ void ue_event_manager::handle_uci_indication(const uci_indication& ind)
                   // Report SR to metrics.
                   du_cells[ue_cc.cell_index].metrics->handle_sr_indication(ue_cc.ue_index);
                   // Send SR metrics using singleton
-                  sr_metrics metrics{
-                      metrics_type::SR_IND,
-                      ue_cc.ue_index,
-                      ue_cc.rnti(),
-                      uci_sl
-                  };
+                  sr_metrics metrics{metrics_type::SR_IND, ue_cc.ue_index, ue_cc.rnti(), uci_sl};
                   scheduler_metrics_sender::instance().send_sr_metrics(metrics);
                 }
 
@@ -606,12 +601,7 @@ void ue_event_manager::handle_uci_indication(const uci_indication& ind)
                   du_cells[ue_cc.cell_index].metrics->handle_sr_indication(ue_cc.ue_index);
 
                   // Send SR metrics using singleton
-                  sr_metrics metrics{
-                      metrics_type::SR_IND,
-                      ue_cc.ue_index,
-                      ue_cc.rnti(),
-                      uci_sl
-                  };
+                  sr_metrics metrics{metrics_type::SR_IND, ue_cc.ue_index, ue_cc.rnti(), uci_sl};
                   scheduler_metrics_sender::instance().send_sr_metrics(metrics);
                 }
 

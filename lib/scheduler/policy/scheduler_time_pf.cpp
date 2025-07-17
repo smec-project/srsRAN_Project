@@ -22,10 +22,10 @@
 
 #include "scheduler_time_pf.h"
 #include "../support/csi_report_helpers.h"
-#include <iostream>
-#include <sstream>
 #include <iomanip>
+#include <iostream>
 #include <mutex>
+#include <sstream>
 
 using namespace srsran;
 
@@ -33,71 +33,71 @@ using namespace srsran;
 // imprecision.
 constexpr unsigned MAX_PF_COEFF = 10;
 
-std::mutex scheduler_time_pf::priorities_mutex;
+std::mutex                 scheduler_time_pf::priorities_mutex;
 std::map<unsigned, double> scheduler_time_pf::ul_priorities;
 
 bool scheduler_time_pf::setup_server_socket()
 {
-    // Initialize socket
-    server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_sockfd < 0) {
-        srslog::fetch_basic_logger("SCHED").error("Socket creation failed");
-        return false;
-    }
+  // Initialize socket
+  server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (server_sockfd < 0) {
+    srslog::fetch_basic_logger("SCHED").error("Socket creation failed");
+    return false;
+  }
 
-    // Allow reuse of address and port
-    int reuse = 1;
-    if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-        srslog::fetch_basic_logger("SCHED").error("setsockopt failed");
-        close(server_sockfd);
-        return false;
-    }
+  // Allow reuse of address and port
+  int reuse = 1;
+  if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+    srslog::fetch_basic_logger("SCHED").error("setsockopt failed");
+    close(server_sockfd);
+    return false;
+  }
 
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));  // Clear the structure
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PRIORITY_PORT);
+  struct sockaddr_in server_addr;
+  memset(&server_addr, 0, sizeof(server_addr)); // Clear the structure
+  server_addr.sin_family      = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port        = htons(PRIORITY_PORT);
 
-    if (bind(server_sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        srslog::fetch_basic_logger("SCHED").error("Bind failed");
-        close(server_sockfd);
-        return false;
-    }
+  if (bind(server_sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    srslog::fetch_basic_logger("SCHED").error("Bind failed");
+    close(server_sockfd);
+    return false;
+  }
 
-    if (listen(server_sockfd, 1) < 0) {
-        srslog::fetch_basic_logger("SCHED").error("Listen failed");
-        close(server_sockfd);
-        return false;
-    }
+  if (listen(server_sockfd, 1) < 0) {
+    srslog::fetch_basic_logger("SCHED").error("Listen failed");
+    close(server_sockfd);
+    return false;
+  }
 
-    std::cout << "Server socket setup complete, listening on port " << PRIORITY_PORT << std::endl;
-    return true;
+  std::cout << "Server socket setup complete, listening on port " << PRIORITY_PORT << std::endl;
+  return true;
 }
 
 scheduler_time_pf::scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_) :
-    fairness_coeff(std::get<time_pf_scheduler_expert_config>(expert_cfg_.strategy_cfg).pf_sched_fairness_coeff),
-    running(true)
+  fairness_coeff(std::get<time_pf_scheduler_expert_config>(expert_cfg_.strategy_cfg).pf_sched_fairness_coeff),
+  running(true)
 {
-    if (setup_server_socket()) {
-        // Start socket handling thread only if socket setup was successful
-        socket_thread = std::thread(&scheduler_time_pf::handle_priority_messages, this);
-        srslog::fetch_basic_logger("SCHED").info("Priority control server started on port {}", PRIORITY_PORT);
-    } else {
-        srslog::fetch_basic_logger("SCHED").info("Priority control server setup failed, using normal PF scheduling");
-    }
+  if (setup_server_socket()) {
+    // Start socket handling thread only if socket setup was successful
+    socket_thread = std::thread(&scheduler_time_pf::handle_priority_messages, this);
+    srslog::fetch_basic_logger("SCHED").info("Priority control server started on port {}", PRIORITY_PORT);
+  } else {
+    srslog::fetch_basic_logger("SCHED").info("Priority control server setup failed, using normal PF scheduling");
+  }
 }
 
 scheduler_time_pf::~scheduler_time_pf()
 {
-    running = false;
-    if (socket_thread.joinable()) {
-        socket_thread.join();
-    }
-    if (client_sockfd > 0) {
-        close(client_sockfd);
-    }
-    close(server_sockfd);
+  running = false;
+  if (socket_thread.joinable()) {
+    socket_thread.join();
+  }
+  if (client_sockfd > 0) {
+    close(client_sockfd);
+  }
+  close(server_sockfd);
 }
 
 dl_alloc_result scheduler_time_pf::schedule_dl_retxs(ue_pdsch_allocator&          pdsch_alloc,
@@ -544,21 +544,21 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
 
   // Get RNTI as unsigned value
   unsigned rnti_val = static_cast<unsigned>(u.crnti()) & 0xFFFF;
-  
+
   double offset = 0.0;
   {
     std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
-    auto it = scheduler_time_pf::ul_priorities.find(rnti_val);
+    auto                        it = scheduler_time_pf::ul_priorities.find(rnti_val);
     if (it != scheduler_time_pf::ul_priorities.end()) {
-        offset = it->second;
+      offset = it->second;
     }
   }
 
   // Calculate UL PF priority as normal
-  const double estimated_rate = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
+  const double estimated_rate   = ue_cc->get_estimated_ul_rate(pusch_cfg, mcs.value(), ss_info->ul_crb_lims.length());
   const double current_avg_rate = total_ul_avg_rate();
-  double pf_weight = 0;
-  
+  double       pf_weight        = 0;
+
   if (current_avg_rate != 0) {
     if (parent->fairness_coeff >= MAX_PF_COEFF) {
       pf_weight = 1 / current_avg_rate;
@@ -570,10 +570,10 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   }
   const double rate_weight = compute_ul_rate_weight(
       u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
-  
+
   ul_prio = rate_weight * pf_weight + offset;
   // if (offset != 0) {
-  //   std::cout << "UL priority for UE 0x" << std::hex << rnti_val << std::dec << ": " 
+  //   std::cout << "UL priority for UE 0x" << std::hex << rnti_val << std::dec << ": "
   //             << rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
   // }
   sr_ind_received = u.has_pending_sr();
@@ -686,48 +686,48 @@ bool scheduler_time_pf::ue_ul_prio_compare::operator()(const scheduler_time_pf::
 
 void scheduler_time_pf::handle_priority_messages()
 {
-    #pragma pack(push, 1)
-    struct priority_message {
-        char rnti[5];  // 4 chars for RNTI + null terminator
-        double priority;
-        uint8_t is_reset;
-    };
-    #pragma pack(pop)
+#pragma pack(push, 1)
+  struct priority_message {
+    char    rnti[5]; // 4 chars for RNTI + null terminator
+    double  priority;
+    uint8_t is_reset;
+  };
+#pragma pack(pop)
 
-    struct sockaddr_in client_addr;
-    socklen_t len = sizeof(client_addr);
-    
-    while (running) {
-        client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_addr, &len);
-        if (client_sockfd < 0) {
-            std::cout << "Accept failed, but keeping existing priorities" << std::endl;
-            continue;
-        }
+  struct sockaddr_in client_addr;
+  socklen_t          len = sizeof(client_addr);
 
-        priority_message msg;
-        while (running) {
-            ssize_t n = recv(client_sockfd, &msg, sizeof(msg), 0);
-            if (n <= 0) {
-                std::cout << "Connection closed, but keeping existing priorities" << std::endl;
-                close(client_sockfd);
-                break; 
-            }
-
-            // Convert RNTI string to unsigned
-            std::string rnti_str(msg.rnti);
-            unsigned rnti_val = std::stoul(rnti_str, nullptr, 16);
-
-            {
-                std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
-                if (msg.is_reset) {
-                    scheduler_time_pf::ul_priorities.erase(rnti_val);
-                    // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
-                } else {
-                    scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
-                    // std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val 
-                    //          << std::dec << " to " << msg.priority << std::endl;
-                }
-            }
-        }
+  while (running) {
+    client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_addr, &len);
+    if (client_sockfd < 0) {
+      std::cout << "Accept failed, but keeping existing priorities" << std::endl;
+      continue;
     }
+
+    priority_message msg;
+    while (running) {
+      ssize_t n = recv(client_sockfd, &msg, sizeof(msg), 0);
+      if (n <= 0) {
+        std::cout << "Connection closed, but keeping existing priorities" << std::endl;
+        close(client_sockfd);
+        break;
+      }
+
+      // Convert RNTI string to unsigned
+      std::string rnti_str(msg.rnti);
+      unsigned    rnti_val = std::stoul(rnti_str, nullptr, 16);
+
+      {
+        std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
+        if (msg.is_reset) {
+          scheduler_time_pf::ul_priorities.erase(rnti_val);
+          // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
+        } else {
+          scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
+          // std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val
+          //          << std::dec << " to " << msg.priority << std::endl;
+        }
+      }
+    }
+  }
 }

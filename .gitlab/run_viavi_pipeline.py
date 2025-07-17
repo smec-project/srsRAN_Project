@@ -50,7 +50,13 @@ class _ArgsDefinition:
 
 def get_viavi_tests():
     viavi_test_declaration = (
-        pathlib.Path(__file__).parent / ".." / "tests" / "e2e" / "tests" / "viavi" / "test_declaration.yml"
+        pathlib.Path(__file__).parent
+        / ".."
+        / "tests"
+        / "e2e"
+        / "tests"
+        / "viavi"
+        / "test_declaration.yml"
     ).resolve()
     with open(viavi_test_declaration, "r", encoding="utf-8") as file:
         data = yaml.safe_load(file)
@@ -166,7 +172,9 @@ def main():
     """
     Entrypoint runner.
     """
-    parser = argparse.ArgumentParser(description="List the available tests (--testlist) or run a test.")
+    parser = argparse.ArgumentParser(
+        description="List the available tests (--testlist) or run a test."
+    )
     parser.add_argument(
         "--testlist",
         action="store_true",
@@ -178,7 +186,9 @@ def main():
         help="[REQUIRED] Gitlab private token: https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html#create-a-personal-access-token",
     )
 
-    parser.add_argument("--branch", help="[REQUIRED] Remote branch in srsgnb repository.")
+    parser.add_argument(
+        "--branch", help="[REQUIRED] Remote branch in srsgnb repository."
+    )
 
     parser.add_argument(
         "--testid",

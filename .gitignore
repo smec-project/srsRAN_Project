@@ -3,4 +3,5 @@ pets_controller/*.txt
 pets_controller/labeled_data/*
 pets_controller/models/*
 pets_controller/eval_data/*
+pets_controller/raw_data/*
 tutti_controller

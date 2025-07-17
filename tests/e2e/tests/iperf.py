@@ -37,7 +37,11 @@ from retina.protocol.gnb_pb2_grpc import GNBStub
 from retina.protocol.ue_pb2 import IPerfDir, IPerfProto
 from retina.protocol.ue_pb2_grpc import UEStub
 
-from .steps.configuration import configure_test_parameters, get_minimum_sample_rate_for_bandwidth, is_tdd
+from .steps.configuration import (
+    configure_test_parameters,
+    get_minimum_sample_rate_for_bandwidth,
+    is_tdd,
+)
 from .steps.stub import INTER_UE_START_PERIOD, iperf_parallel, start_and_attach, stop
 
 TINY_DURATION = 10
@@ -115,7 +119,9 @@ fdd_dl_tcp = defaultdict(
 )
 
 
-def get_maximum_throughput_tdd(bandwidth: int, direction: IPerfDir, protocol: IPerfProto) -> int:
+def get_maximum_throughput_tdd(
+    bandwidth: int, direction: IPerfDir, protocol: IPerfProto
+) -> int:
     """
     Get the maximum E2E TDD throughput for bandwidth, direction and transport protocol
     """
@@ -132,7 +138,9 @@ def get_maximum_throughput_tdd(bandwidth: int, direction: IPerfDir, protocol: IP
     return 0
 
 
-def get_maximum_throughput_fdd(bandwidth: int, direction: IPerfDir, protocol: IPerfProto) -> int:
+def get_maximum_throughput_fdd(
+    bandwidth: int, direction: IPerfDir, protocol: IPerfProto
+) -> int:
     """
     Get the maximum E2E FDD throughput for bandwidth, direction and transport protocol
     """
@@ -149,7 +157,9 @@ def get_maximum_throughput_fdd(bandwidth: int, direction: IPerfDir, protocol: IP
     return 0
 
 
-def get_maximum_throughput(bandwidth: int, band: int, direction: IPerfDir, protocol: IPerfProto) -> int:
+def get_maximum_throughput(
+    bandwidth: int, band: int, direction: IPerfDir, protocol: IPerfProto
+) -> int:
     """
     Get the maximum E2E throughput for bandwidth, duplex-type, direction and transport protocol
     """
@@ -242,7 +252,12 @@ def test_srsue(
 @mark.android
 @mark.flaky(
     reruns=2,
-    only_rerun=["failed to start", "Exception calling application", "Attach timeout reached", "Some packages got lost"],
+    only_rerun=[
+        "failed to start",
+        "Exception calling application",
+        "Attach timeout reached",
+        "Some packages got lost",
+    ],
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_android(
@@ -307,7 +322,12 @@ def test_android(
 @mark.android_hp
 @mark.flaky(
     reruns=2,
-    only_rerun=["failed to start", "Exception calling application", "Attach timeout reached", "Some packages got lost"],
+    only_rerun=[
+        "failed to start",
+        "Exception calling application",
+        "Attach timeout reached",
+        "Some packages got lost",
+    ],
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_android_hp(
@@ -360,7 +380,9 @@ def test_android_hp(
     (param(41, 30, 20, id="band:%s-scs:%s-bandwidth:%s"),),
 )
 @mark.zmq_2x2_mimo
-@mark.flaky(reruns=2, only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"])
+@mark.flaky(
+    reruns=2, only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"]
+)
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_zmq_2x2_mimo(
     retina_manager: RetinaTestManager,
@@ -423,7 +445,9 @@ def test_zmq_2x2_mimo(
     (param(41, 30, 20, id="band:%s-scs:%s-bandwidth:%s"),),
 )
 @mark.zmq_4x4_mimo
-@mark.flaky(reruns=2, only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"])
+@mark.flaky(
+    reruns=2, only_rerun=["failed to start", "Attach timeout reached", "5GC crashed"]
+)
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_zmq_4x4_mimo(
     retina_manager: RetinaTestManager,
@@ -721,7 +745,12 @@ def _iperf(
     )
 
     ue_attach_info_dict = start_and_attach(
-        ue_array, gnb, fivegc, gnb_post_cmd=gnb_post_cmd, plmn=plmn, inter_ue_start_period=inter_ue_start_period
+        ue_array,
+        gnb,
+        fivegc,
+        gnb_post_cmd=gnb_post_cmd,
+        plmn=plmn,
+        inter_ue_start_period=inter_ue_start_period,
     )
 
     iperf_parallel(
@@ -735,4 +764,11 @@ def _iperf(
     )
 
     sleep(wait_before_power_off)
-    stop(ue_array, gnb, fivegc, retina_data, ue_stop_timeout=ue_stop_timeout, warning_as_errors=warning_as_errors)
+    stop(
+        ue_array,
+        gnb,
+        fivegc,
+        retina_data,
+        ue_stop_timeout=ue_stop_timeout,
+        warning_as_errors=warning_as_errors,
+    )

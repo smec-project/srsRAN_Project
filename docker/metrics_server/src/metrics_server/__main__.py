@@ -28,34 +28,39 @@ def main():
 
     client, bucket, testbed, clean_bucket, port, log_level = _parse_args()
 
-    logging.basicConfig(format="%(asctime)s \x1b[32;20m[%(levelname)s]\x1b[0m %(message)s", level=log_level)
+    logging.basicConfig(
+        format="%(asctime)s \x1b[32;20m[%(levelname)s]\x1b[0m %(message)s",
+        level=log_level,
+    )
     logging.info("Starting srsRAN Project Metrics Server")
 
     if clean_bucket:
         _recreate_bucket(client, bucket)
 
     queue_obj: Queue[Optional[Dict[str, Any]]] = Queue()  #
-# Copyright 2021-2024 Software Radio Systems Limited
-#
-# This file is part of srsRAN
-#
-# srsRAN is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of
-# the License, or (at your option) any later version.
-#
-# srsRAN is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU Affero General Public License for more details.
-#
-# A copy of the GNU Affero General Public License can be found in
-# the LICENSE file in the top-level directory of this distribution
-# and at http://www.gnu.org/licenses/.
-#
+    # Copyright 2021-2024 Software Radio Systems Limited
+    #
+    # This file is part of srsRAN
+    #
+    # srsRAN is free software: you can redistribute it and/or modify
+    # it under the terms of the GNU Affero General Public License as
+    # published by the Free Software Foundation, either version 3 of
+    # the License, or (at your option) any later version.
+    #
+    # srsRAN is distributed in the hope that it will be useful,
+    # but WITHOUT ANY WARRANTY; without even the implied warranty of
+    # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    # GNU Affero General Public License for more details.
+    #
+    # A copy of the GNU Affero General Public License can be found in
+    # the LICENSE file in the top-level directory of this distribution
+    # and at http://www.gnu.org/licenses/.
+    #
 
     parsing_thread = Thread(target=_start_metric_server, args=(port, queue_obj))
-    pushing_thread = Thread(target=_publish_data, args=(client, bucket, testbed, queue_obj))
+    pushing_thread = Thread(
+        target=_publish_data, args=(client, bucket, testbed, queue_obj)
+    )
 
     parsing_thread.start()
     pushing_thread.start()
@@ -64,7 +69,9 @@ def main():
         logging.info("Closing")
         queue_obj.put(None)
         with suppress(IOError):
-            socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM).sendto(b"", ("localhost", port))
+            socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM).sendto(
+                b"", ("localhost", port)
+            )
 
     signal.signal(signal.SIGINT, lambda signum, frame: close())
     signal.signal(signal.SIGTERM, lambda signum, frame: close())
@@ -88,16 +95,27 @@ def _parse_args() -> Tuple[InfluxDBClient, str, str, bool, int, int]:
     )
     parser.add_argument("--bucket", required=True, help="Bucket to save the data.")
     parser.add_argument(
-        "--clean-bucket", action="store_true", help="Remove all data in the bucket before pushing data from input file"
+        "--clean-bucket",
+        action="store_true",
+        help="Remove all data in the bucket before pushing data from input file",
     )
-    parser.add_argument("--testbed", required=True, help="Testbed where srsRAN Project was run")
     parser.add_argument(
-        "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO", help="Server Log level"
+        "--testbed", required=True, help="Testbed where srsRAN Project was run"
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=logging.getLevelNamesMapping().keys(),
+        default="INFO",
+        help="Server Log level",
     )
 
     args = parser.parse_args()
 
-    db_config = {key: value for pair_str in args.db_config for key, value in (pair_str.split("=", 1),)}
+    db_config = {
+        key: value
+        for pair_str in args.db_config
+        for key, value in (pair_str.split("=", 1),)
+    }
 
     return (
         InfluxDBClient(**db_config),
@@ -111,7 +129,9 @@ def _parse_args() -> Tuple[InfluxDBClient, str, str, bool, int, int]:
 
 def _start_metric_server(
     port: int,
-    queue_obj: Queue[Optional[Dict[str, Any]]],  # pylint: disable=unsubscriptable-object
+    queue_obj: Queue[
+        Optional[Dict[str, Any]]
+    ],  # pylint: disable=unsubscriptable-object
     max_buffer_size: int = 1024**2,
 ) -> None:
     # Create Server
@@ -166,7 +186,9 @@ def _publish_data(
             try:
                 # Currently we only support ue_list metric
                 if "ue_list" in metric:
-                    timestamp = datetime.fromtimestamp(metric["timestamp"], UTC).isoformat()
+                    timestamp = datetime.fromtimestamp(
+                        metric["timestamp"], UTC
+                    ).isoformat()
                     # UE Info measurement
                     for ue_info in metric["ue_list"]:
                         ue_container = ue_info["ue_container"]

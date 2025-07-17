@@ -56,7 +56,7 @@ o_du_unit multicell_flexible_o_du_factory::create_flexible_o_du(const o_du_unit_
 
   static constexpr unsigned du_id       = 0U;
   o_du_low_unit_config      odu_low_cfg = {
-           du_lo, prach_ports, du_cells, max_pusch_per_slot, du_id, static_cast<unsigned>(du_cells.size())};
+      du_lo, prach_ports, du_cells, max_pusch_per_slot, du_id, static_cast<unsigned>(du_cells.size())};
   o_du_low_unit_dependencies odu_low_dependencies = {
       du_impl->get_upper_ru_dl_rg_adapter(), du_impl->get_upper_ru_ul_request_adapter(), *dependencies.workers};
   o_du_low_unit_factory odu_low_factory(du_lo.hal_config, nof_cells);

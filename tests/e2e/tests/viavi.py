@@ -94,7 +94,9 @@ def load_yaml_config(config_filename: str) -> List[_ViaviConfiguration]:
     Load yaml config
     """
     test_declaration_list: List[_ViaviConfiguration] = []
-    config_filepath = Path(__file__).parent.joinpath("viavi", config_filename).absolute()
+    config_filepath = (
+        Path(__file__).parent.joinpath("viavi", config_filename).absolute()
+    )
     with open(config_filepath, "r", encoding="UTF-8") as file:
         test_declaration_list_raw = yaml.safe_load(file)["tests"]
 
@@ -372,7 +374,11 @@ def _test_viavi(
                 "nof_antennas_ul": 1,
                 "rlc_metrics": True,
                 "warning_extra_regex": (
-                    (r"(?!.*" + r")(?!.*".join(test_declaration.warning_allowlist) + r")")
+                    (
+                        r"(?!.*"
+                        + r")(?!.*".join(test_declaration.warning_allowlist)
+                        + r")"
+                    )
                     if test_declaration.warning_allowlist
                     else ""
                 ),
@@ -381,7 +387,9 @@ def _test_viavi(
     }
     if metrics_server is not None:
         configure_metric_server_for_gnb(
-            retina_manager=retina_manager, retina_data=retina_data, metrics_server=metrics_server
+            retina_manager=retina_manager,
+            retina_data=retina_data,
+            metrics_server=metrics_server,
         )
 
     retina_manager.parse_configuration(retina_data.test_config)
@@ -411,9 +419,15 @@ def _test_viavi(
     logging.info(
         "Starting Campaign %s%s",
         test_declaration.campaign_filename,
-        (f" - Test {test_declaration.test_name}" if test_declaration.test_name is not None else ""),
+        (
+            f" - Test {test_declaration.test_name}"
+            if test_declaration.test_name is not None
+            else ""
+        ),
     )
-    campaign_name = viavi.schedule_campaign(test_declaration.campaign_filename, test_declaration.test_name)
+    campaign_name = viavi.schedule_campaign(
+        test_declaration.campaign_filename, test_declaration.test_name
+    )
 
     # Start campaign
     viavi.run_campaign(campaign_name)
@@ -448,9 +462,16 @@ def _test_viavi(
             report_folder = viavi.generate_report(campaign_name)
             logging.info("Folder with Viavi report: %s", report_folder)
             logging.info("Downloading Viavi report")
-            viavi.download_directory(report_folder, Path(test_log_folder).joinpath("viavi"))
+            viavi.download_directory(
+                report_folder, Path(test_log_folder).joinpath("viavi")
+            )
             _, gnb_error_count = _stop_stub(
-                gnb, "GNB", retina_data, gnb_stop_timeout, log_search, test_declaration.warning_as_errors
+                gnb,
+                "GNB",
+                retina_data,
+                gnb_stop_timeout,
+                log_search,
+                test_declaration.warning_as_errors,
             )
             check_metrics_criteria(
                 test_configuration=test_declaration,
@@ -493,7 +514,10 @@ def check_metrics_criteria(
     )
     criteria_result.append(
         _ViaviResult(
-            "DL bitrate", test_configuration.expected_dl_bitrate, kpis.dl_brate_aggregate, criteria_dl_brate_aggregate
+            "DL bitrate",
+            test_configuration.expected_dl_bitrate,
+            kpis.dl_brate_aggregate,
+            criteria_dl_brate_aggregate,
         )
     )
 
@@ -502,11 +526,16 @@ def check_metrics_criteria(
     )
     criteria_result.append(
         _ViaviResult(
-            "UL bitrate", test_configuration.expected_ul_bitrate, kpis.ul_brate_aggregate, criteria_ul_brate_aggregate
+            "UL bitrate",
+            test_configuration.expected_ul_bitrate,
+            kpis.ul_brate_aggregate,
+            criteria_ul_brate_aggregate,
         )
     )
 
-    criteria_nof_ko_dl_gnb = check_criteria(kpis.nof_ko_dl, test_configuration.expected_nof_kos + 100, operator.lt)
+    criteria_nof_ko_dl_gnb = check_criteria(
+        kpis.nof_ko_dl, test_configuration.expected_nof_kos + 100, operator.lt
+    )
     criteria_result.append(
         _ViaviResult(
             "DL KOs (gnb)",
@@ -516,8 +545,14 @@ def check_metrics_criteria(
         )
     )
 
-    viavi_dl_kos = viavi_kpis.dl_data.num_tbs_errors if viavi_kpis.dl_data.num_tbs_errors is not None else 0
-    criteria_nof_ko_dl_viavi = check_criteria(viavi_dl_kos, test_configuration.expected_nof_kos, operator.lt)
+    viavi_dl_kos = (
+        viavi_kpis.dl_data.num_tbs_errors
+        if viavi_kpis.dl_data.num_tbs_errors is not None
+        else 0
+    )
+    criteria_nof_ko_dl_viavi = check_criteria(
+        viavi_dl_kos, test_configuration.expected_nof_kos, operator.lt
+    )
     criteria_result.append(
         _ViaviResult(
             "DL KOs (viavi)",
@@ -527,7 +562,9 @@ def check_metrics_criteria(
         )
     )
 
-    criteria_nof_ko_ul_gnb = check_criteria(kpis.nof_ko_ul, test_configuration.expected_nof_kos, operator.lt)
+    criteria_nof_ko_ul_gnb = check_criteria(
+        kpis.nof_ko_ul, test_configuration.expected_nof_kos, operator.lt
+    )
     criteria_result.append(
         _ViaviResult(
             "UL KOs (gnb)",
@@ -537,8 +574,14 @@ def check_metrics_criteria(
         )
     )
 
-    viavi_ul_kos = viavi_kpis.ul_data.num_tbs_nack if viavi_kpis.ul_data.num_tbs_nack is not None else 0
-    criteria_nof_ko_ul_viavi = check_criteria(viavi_ul_kos, test_configuration.expected_nof_kos, operator.lt)
+    viavi_ul_kos = (
+        viavi_kpis.ul_data.num_tbs_nack
+        if viavi_kpis.ul_data.num_tbs_nack is not None
+        else 0
+    )
+    criteria_nof_ko_ul_viavi = check_criteria(
+        viavi_ul_kos, test_configuration.expected_nof_kos, operator.lt
+    )
     criteria_result.append(
         _ViaviResult(
             "UL KOs (viavi)",
@@ -550,12 +593,19 @@ def check_metrics_criteria(
 
     criteria_nof_errors = check_criteria(gnb_error_count, 0, operator.eq)
     criteria_result.append(
-        _ViaviResult("Errors" + (" & warnings" if warning_as_errors else ""), 0, gnb_error_count, criteria_nof_errors)
+        _ViaviResult(
+            "Errors" + (" & warnings" if warning_as_errors else ""),
+            0,
+            gnb_error_count,
+            criteria_nof_errors,
+        )
     )
 
     # Check procedure table
     viavi_kpis.print_procedure_failures(_OMIT_VIAVI_FAILURE_LIST)
-    criteria_procedure_table = viavi_kpis.get_number_of_procedure_failures(_OMIT_VIAVI_FAILURE_LIST) == 0
+    criteria_procedure_table = (
+        viavi_kpis.get_number_of_procedure_failures(_OMIT_VIAVI_FAILURE_LIST) == 0
+    )
     criteria_result.append(
         _ViaviResult(
             "Procedure table",
@@ -581,7 +631,9 @@ def check_metrics_criteria(
         for criteria in criteria_result:
             if not criteria.is_ok:
                 criteria_errors_str.append(criteria.criteria_name)
-        pytest.fail("Test didn't pass the following criteria: " + ", ".join(criteria_errors_str))
+        pytest.fail(
+            "Test didn't pass the following criteria: " + ", ".join(criteria_errors_str)
+        )
 
 
 def create_table(results: List[_ViaviResult], capsys):

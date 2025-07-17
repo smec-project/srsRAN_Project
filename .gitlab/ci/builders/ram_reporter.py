@@ -14,12 +14,13 @@ import os
 import sys
 import psutil
 
+
 def get_cgroup_memory_path():
     try:
-        with open('/proc/self/cgroup', 'r') as f:
+        with open("/proc/self/cgroup", "r") as f:
             lines = f.readlines()
         for line in lines:
-            parts = line.strip().split(':')
+            parts = line.strip().split(":")
             if len(parts) == 3:
                 cgroup_path = parts[2].strip()
                 memory_path = f"/sys/fs/cgroup{cgroup_path}/memory.current"
@@ -30,9 +31,10 @@ def get_cgroup_memory_path():
         print(f"Error to read /proc/self/cgroup: {e}")
         return None
 
+
 def get_memory_usage(memory_path):
     try:
-        with open(memory_path, 'r') as f:
+        with open(memory_path, "r") as f:
             memory_usage = int(f.read().strip())
         return memory_usage
     except FileNotFoundError:
@@ -42,9 +44,11 @@ def get_memory_usage(memory_path):
         print(f"Error to read {memory_path}: {e}")
         return None
 
+
 def _bytes_to_gb(size_in_bytes):
     gb = size_in_bytes / (1024**3)
     return gb
+
 
 def write_mem_baremetal():
     filename = sys.argv[1]
@@ -68,6 +72,7 @@ def write_mem_baremetal():
             file.write(f"{peak_ram_usage_gb:.2f}")
 
         time.sleep(0.5)
+
 
 def write_mem_kubernetes():
     memory_path = get_cgroup_memory_path()

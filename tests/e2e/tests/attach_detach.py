@@ -35,7 +35,14 @@ from retina.protocol.ue_pb2 import IPerfDir, IPerfProto
 from retina.protocol.ue_pb2_grpc import UEStub
 
 from .steps.configuration import configure_test_parameters
-from .steps.stub import iperf_start, iperf_wait_until_finish, start_network, stop, ue_start_and_attach, ue_stop
+from .steps.stub import (
+    iperf_start,
+    iperf_wait_until_finish,
+    start_network,
+    stop,
+    ue_start_and_attach,
+    ue_stop,
+)
 
 HIGH_BITRATE = int(15e6)
 BITRATE_THRESHOLD: float = 0.1
@@ -233,7 +240,9 @@ def _attach_and_detach_multi_ues(
     ue_array_to_iperf = ue_array[::2]
     ue_array_to_attach = ue_array[1::2]
 
-    iperf_duration = reattach_count * ((ue_stop_timeout * len(ue_array_to_attach)) + ue_settle_time)
+    iperf_duration = reattach_count * (
+        (ue_stop_timeout * len(ue_array_to_attach)) + ue_settle_time
+    )
 
     # Starting iperf in half of the UEs
     iperf_array = []
@@ -262,6 +271,15 @@ def _attach_and_detach_multi_ues(
 
     # Stop and validate iperfs
     for ue_attached_info, task, iperf_request in iperf_array:
-        iperf_wait_until_finish(ue_attached_info, fivegc, task, iperf_request, BITRATE_THRESHOLD)
+        iperf_wait_until_finish(
+            ue_attached_info, fivegc, task, iperf_request, BITRATE_THRESHOLD
+        )
 
-    stop(ue_array, gnb, fivegc, retina_data, ue_stop_timeout=ue_stop_timeout, warning_as_errors=warning_as_errors)
+    stop(
+        ue_array,
+        gnb,
+        fivegc,
+        retina_data,
+        ue_stop_timeout=ue_stop_timeout,
+        warning_as_errors=warning_as_errors,
+    )

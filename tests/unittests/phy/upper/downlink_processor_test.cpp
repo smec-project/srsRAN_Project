@@ -261,8 +261,9 @@ TEST(downlinkProcessorTest, finishBeforeConfigureDeath)
   ASSERT_TRUE(!gw.sent);
 
 #ifdef ASSERTS_ENABLED
-  ASSERT_DEATH({ dl_processor->finish_processing_pdus(); },
-               R"(DL processor finish was requested in an invalid state\, i\.e\.\, idle.)");
+  ASSERT_DEATH(
+      { dl_processor->finish_processing_pdus(); },
+      R"(DL processor finish was requested in an invalid state\, i\.e\.\, idle.)");
 #endif // ASSERTS_ENABLED
 
   ASSERT_TRUE(!gw.sent);

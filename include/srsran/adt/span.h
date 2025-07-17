@@ -42,18 +42,15 @@ namespace detail {
 /// Helper traits used by SFINAE expressions in constructors.
 
 template <typename U>
-struct is_span : std::false_type {
-};
+struct is_span : std::false_type {};
 template <typename U>
-struct is_span<span<U>> : std::true_type {
-};
+struct is_span<span<U>> : std::true_type {};
 
 template <typename U>
 using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<U>>;
 
 template <class Container, class U, class = void>
-struct is_container_compatible : public std::false_type {
-};
+struct is_container_compatible : public std::false_type {};
 template <class Container, class U>
 struct is_container_compatible<
     Container,
@@ -71,8 +68,7 @@ struct is_container_compatible<
         // Check type compatibility between the contained type and the span type.
         std::enable_if_t<
             std::is_convertible_v<std::remove_pointer_t<decltype(std::declval<Container>().data())> (*)[], U (*)[]>,
-            int>>> : public std::true_type {
-};
+            int>>> : public std::true_type {};
 
 } // namespace detail
 

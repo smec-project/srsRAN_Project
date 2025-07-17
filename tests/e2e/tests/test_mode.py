@@ -32,13 +32,24 @@ from pytest import mark, param
 from retina.client.manager import RetinaTestManager
 from retina.launcher.artifacts import RetinaTestData
 from retina.launcher.utils import configure_artifacts
-from retina.protocol.base_pb2 import FiveGCDefinition, GNBDefinition, PLMN, StartInfo, UEDefinition
+from retina.protocol.base_pb2 import (
+    FiveGCDefinition,
+    GNBDefinition,
+    PLMN,
+    StartInfo,
+    UEDefinition,
+)
 from retina.protocol.fivegc_pb2 import FiveGCStartInfo
 from retina.protocol.fivegc_pb2_grpc import FiveGCStub
 from retina.protocol.gnb_pb2 import GNBStartInfo
 from retina.protocol.gnb_pb2_grpc import GNBStub
 
-from .steps.stub import FIVEGC_STARTUP_TIMEOUT, GNB_STARTUP_TIMEOUT, handle_start_error, stop
+from .steps.stub import (
+    FIVEGC_STARTUP_TIMEOUT,
+    GNB_STARTUP_TIMEOUT,
+    handle_start_error,
+    stop,
+)
 
 _POD_ERROR = "Error creating the pod"
 
@@ -96,7 +107,9 @@ def test_ue(
                     "nof_antennas_ul": nof_ant,
                 },
                 "templates": {
-                    "cu": str(Path(__file__).joinpath("../test_mode/config_ue.yml").resolve()),
+                    "cu": str(
+                        Path(__file__).joinpath("../test_mode/config_ue.yml").resolve()
+                    ),
                     "du": tmp_file.name,
                 },
             },
@@ -124,7 +137,9 @@ def test_ue(
         gnb.Start(
             GNBStartInfo(
                 plmn=PLMN(mcc="001", mnc="01"),
-                ue_definition=UEDefinition(zmq_ip=gnb_def.zmq_ip, zmq_port_array=gnb_def.zmq_port_array),
+                ue_definition=UEDefinition(
+                    zmq_ip=gnb_def.zmq_ip, zmq_port_array=gnb_def.zmq_port_array
+                ),
                 fivegc_definition=fivegc_def,
                 start_info=StartInfo(
                     timeout=gnb_startup_timeout,
@@ -186,7 +201,14 @@ def test_ru_not_crash(
     Run gnb with sanitizers in test mode ru dummy.
     It ignores warnings and KOs, so it will fail if the gnb+sanitizer fails
     """
-    _test_ru(retina_manager, retina_data, gnb, gnb_stop_timeout=150, warning_as_errors=False, fail_if_kos=False)
+    _test_ru(
+        retina_manager,
+        retina_data,
+        gnb,
+        gnb_stop_timeout=150,
+        warning_as_errors=False,
+        fail_if_kos=False,
+    )
 
 
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -221,7 +243,9 @@ def _test_ru(
                     "nof_antennas_ul": nof_ant,
                 },
                 "templates": {
-                    "cu": str(Path(__file__).joinpath("../test_mode/config_ru.yml").resolve()),
+                    "cu": str(
+                        Path(__file__).joinpath("../test_mode/config_ru.yml").resolve()
+                    ),
                     "du": tmp_file.name,
                     "ru": tmp_file.name,
                 },
@@ -241,8 +265,13 @@ def _test_ru(
         gnb.Start(
             GNBStartInfo(
                 plmn=PLMN(mcc="001", mnc="01"),
-                ue_definition=UEDefinition(zmq_ip=gnb_def.zmq_ip, zmq_port_array=gnb_def.zmq_port_array[:nof_ant]),
-                fivegc_definition=FiveGCDefinition(amf_ip=gnb_def.zmq_ip, amf_port=38412),
+                ue_definition=UEDefinition(
+                    zmq_ip=gnb_def.zmq_ip,
+                    zmq_port_array=gnb_def.zmq_port_array[:nof_ant],
+                ),
+                fivegc_definition=FiveGCDefinition(
+                    amf_ip=gnb_def.zmq_ip, amf_port=38412
+                ),
                 start_info=StartInfo(
                     timeout=gnb_startup_timeout,
                     post_commands=("cu_cp amf --no_core 1",),

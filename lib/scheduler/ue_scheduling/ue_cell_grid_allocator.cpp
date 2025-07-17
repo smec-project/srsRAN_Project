@@ -22,20 +22,20 @@
 
 #include <iostream>
 
-#include "ue_cell_grid_allocator.h"
 #include "../support/csi_report_helpers.h"
 #include "../support/dci_builder.h"
 #include "../support/mcs_calculator.h"
 #include "../support/sched_result_helpers.h"
 #include "../ue_context/ue_drx_controller.h"
+#include "scheduler_metrics_sender.h"
+#include "ue_cell_grid_allocator.h"
 #include "ue_pdsch_alloc_param_candidate_searcher.h"
 #include "ue_pusch_alloc_param_candidate_searcher.h"
 #include "srsran/ran/pdcch/coreset.h"
 #include "srsran/ran/transform_precoding/transform_precoding_helpers.h"
 #include "srsran/scheduler/scheduler_dci.h"
-#include "srsran/support/error_handling.h"
-#include "scheduler_metrics_sender.h"
 #include "srsran/scheduler/scheduler_metrics.h"
+#include "srsran/support/error_handling.h"
 
 using namespace srsran;
 
@@ -44,10 +44,10 @@ ue_cell_grid_allocator::ue_cell_grid_allocator(const scheduler_ue_expert_config&
                                                srslog::basic_logger&             logger_) :
   expert_cfg(expert_cfg_), ues(ues_), logger(logger_)
 {
-    if (scheduler_metrics_sender::instance().init(5556)) {
-        srslog::fetch_basic_logger("SCHED").info("Metrics sender initialized on port 5556");
-        std::cout << "Metrics sender initialized on port 5556" << std::endl;
-    }
+  if (scheduler_metrics_sender::instance().init(5556)) {
+    srslog::fetch_basic_logger("SCHED").info("Metrics sender initialized on port 5556");
+    std::cout << "Metrics sender initialized on port 5556" << std::endl;
+  }
 }
 
 void ue_cell_grid_allocator::add_cell(du_cell_index_t           cell_index,
@@ -1031,13 +1031,7 @@ ue_cell_grid_allocator::allocate_ul_grant(const ue_pusch_grant& grant, ran_slice
     //           << " (RNTI=0x" << std::hex << to_value(u.crnti) << std::dec << ")"
     //           << ", slot=" << pusch_alloc.slot.to_uint() << std::endl;
     if (crbs.length() > 0) {
-      prb_metrics metrics{
-          metrics_type::PRB_ALLOC,
-          u.ue_index,
-          u.crnti,
-          (unsigned)crbs.length(),
-          pusch_alloc.slot
-      };
+      prb_metrics metrics{metrics_type::PRB_ALLOC, u.ue_index, u.crnti, (unsigned)crbs.length(), pusch_alloc.slot};
       scheduler_metrics_sender::instance().send_prb_metrics(metrics);
     }
 

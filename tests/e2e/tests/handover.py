@@ -89,7 +89,10 @@ def test_smoke_sequentially(
     ),
 )
 @mark.zmq
-@mark.flaky(reruns=2, only_rerun=["failed to start", "Attach timeout reached", "StatusCode.ABORTED"])
+@mark.flaky(
+    reruns=2,
+    only_rerun=["failed to start", "Attach timeout reached", "StatusCode.ABORTED"],
+)
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_zmq_handover_sequentially(
     retina_manager: RetinaTestManager,
@@ -164,8 +167,19 @@ def _handover_sequentially(
 
             ping_task_array = ping_start(ue_attach_info_dict, fivegc, traffic_seconds)
 
-            for _from_position, _to_position, _movement_steps, _sleep_between_movement_steps in movements:
-                _do_ho((ue_stub,), _from_position, _to_position, _movement_steps, _sleep_between_movement_steps)
+            for (
+                _from_position,
+                _to_position,
+                _movement_steps,
+                _sleep_between_movement_steps,
+            ) in movements:
+                _do_ho(
+                    (ue_stub,),
+                    _from_position,
+                    _to_position,
+                    _movement_steps,
+                    _sleep_between_movement_steps,
+                )
 
             ping_wait_until_finish(ping_task_array)
 
@@ -180,7 +194,10 @@ def _handover_sequentially(
     ),
 )
 @mark.zmq
-@mark.flaky(reruns=2, only_rerun=["failed to start", "Attach timeout reached", "StatusCode.ABORTED"])
+@mark.flaky(
+    reruns=2,
+    only_rerun=["failed to start", "Attach timeout reached", "StatusCode.ABORTED"],
+)
 # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
 def test_zmq_handover_parallel(
     retina_manager: RetinaTestManager,
@@ -222,8 +239,19 @@ def test_zmq_handover_parallel(
 
         ping_task_array = ping_start(ue_attach_info_dict, fivegc, traffic_seconds)
 
-        for from_position, to_position, movement_steps, sleep_between_movement_steps in movements:
-            _do_ho(ue_8, from_position, to_position, movement_steps, sleep_between_movement_steps)
+        for (
+            from_position,
+            to_position,
+            movement_steps,
+            sleep_between_movement_steps,
+        ) in movements:
+            _do_ho(
+                ue_8,
+                from_position,
+                to_position,
+                movement_steps,
+                sleep_between_movement_steps,
+            )
 
         ping_wait_until_finish(ping_task_array)
 
@@ -252,7 +280,9 @@ def _handover_multi_ues(
 ) -> Generator[
     Tuple[
         Dict[UEStub, UEAttachedInfo],
-        Tuple[Tuple[Tuple[float, float, float], Tuple[float, float, float], int, int], ...],
+        Tuple[
+            Tuple[Tuple[float, float, float], Tuple[float, float, float], int, int], ...
+        ],
         int,
     ],
     None,
@@ -282,18 +312,45 @@ def _handover_multi_ues(
         always_download_artifacts=always_download_artifacts,
     )
 
-    start_network(ue_array, gnb, fivegc, gnb_post_cmd=("log --cu_level=debug", "log --mac_level=debug"))
+    start_network(
+        ue_array,
+        gnb,
+        fivegc,
+        gnb_post_cmd=("log --cu_level=debug", "log --mac_level=debug"),
+    )
 
     ue_attach_info_dict = ue_start_and_attach(ue_array, gnb, fivegc)
 
     try:
         # HO while pings
         movement_duration = (movement_steps + 1) * sleep_between_movement_steps
-        movements: Tuple[Tuple[Tuple[float, float, float], Tuple[float, float, float], int, int], ...] = (
-            (original_position, cell_position_offset, movement_steps, sleep_between_movement_steps),
-            (cell_position_offset, original_position, movement_steps, sleep_between_movement_steps),
-            (original_position, cell_position_offset, movement_steps, sleep_between_movement_steps),
-            (cell_position_offset, original_position, movement_steps, sleep_between_movement_steps),
+        movements: Tuple[
+            Tuple[Tuple[float, float, float], Tuple[float, float, float], int, int], ...
+        ] = (
+            (
+                original_position,
+                cell_position_offset,
+                movement_steps,
+                sleep_between_movement_steps,
+            ),
+            (
+                cell_position_offset,
+                original_position,
+                movement_steps,
+                sleep_between_movement_steps,
+            ),
+            (
+                original_position,
+                cell_position_offset,
+                movement_steps,
+                sleep_between_movement_steps,
+            ),
+            (
+                cell_position_offset,
+                original_position,
+                movement_steps,
+                sleep_between_movement_steps,
+            ),
         )
         traffic_seconds = (len(movements) * movement_duration) + len(ue_array)
 
@@ -301,12 +358,21 @@ def _handover_multi_ues(
 
         # Pings after handover
         logging.info("Starting Pings after all HO have been completed")
-        ping_wait_until_finish(ping_start(ue_attach_info_dict, fivegc, movement_duration))
+        ping_wait_until_finish(
+            ping_start(ue_attach_info_dict, fivegc, movement_duration)
+        )
 
         for ue_stub in ue_array:
             ue_validate_no_reattaches(ue_stub)
 
-        stop(ue_array, gnb, fivegc, retina_data, ue_stop_timeout=16, warning_as_errors=warning_as_errors)
+        stop(
+            ue_array,
+            gnb,
+            fivegc,
+            retina_data,
+            ue_stop_timeout=16,
+            warning_as_errors=warning_as_errors,
+        )
     finally:
         get_kpis(gnb, ue_array=ue_array, metrics_summary=metrics_summary)
 
@@ -320,19 +386,43 @@ def _do_ho(
     extra_time: int = 10,
 ):
     for ue_stub in ue_array:
-        logging.info("Moving UE [%s] from %s to %s", id(ue_stub), from_position, to_position)
+        logging.info(
+            "Moving UE [%s] from %s to %s", id(ue_stub), from_position, to_position
+        )
 
     ho_task_array = [
-        ue_expect_handover(ue_stub, ((steps + 1) * sleep_between_steps) + extra_time) for ue_stub in ue_array
+        ue_expect_handover(ue_stub, ((steps + 1) * sleep_between_steps) + extra_time)
+        for ue_stub in ue_array
     ]
 
     for i in range(steps + 1):
         for ue_stub in ue_array:
             ue_move(
                 ue_stub,
-                (int(round(from_position[0] + (i * (to_position[0] - from_position[0]) / steps)))),
-                (int(round(from_position[1] + (i * (to_position[1] - from_position[1]) / steps)))),
-                (int(round(from_position[2] + (i * (to_position[2] - from_position[2]) / steps)))),
+                (
+                    int(
+                        round(
+                            from_position[0]
+                            + (i * (to_position[0] - from_position[0]) / steps)
+                        )
+                    )
+                ),
+                (
+                    int(
+                        round(
+                            from_position[1]
+                            + (i * (to_position[1] - from_position[1]) / steps)
+                        )
+                    )
+                ),
+                (
+                    int(
+                        round(
+                            from_position[2]
+                            + (i * (to_position[2] - from_position[2]) / steps)
+                        )
+                    )
+                ),
             )
         sleep(sleep_between_steps)
 

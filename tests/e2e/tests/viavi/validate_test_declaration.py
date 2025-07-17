@@ -52,7 +52,9 @@ def main():
     current_directory = Path(__file__).parent
     yaml_files = get_yml_file_list(current_directory.absolute())
 
-    schema_filepath = current_directory.joinpath("test_declaration_schema.json").absolute()
+    schema_filepath = current_directory.joinpath(
+        "test_declaration_schema.json"
+    ).absolute()
     with open(schema_filepath, "r", encoding="UTF-8") as schema_file:
         schema = json.load(schema_file)
 

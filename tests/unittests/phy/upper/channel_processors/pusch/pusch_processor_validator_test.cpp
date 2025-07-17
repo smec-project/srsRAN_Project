@@ -369,8 +369,8 @@ TEST_P(PuschProcessorFixture, PuschProcessorValidatortest)
   // Process PUSCH PDU.
 #ifdef ASSERTS_ENABLED
   pusch_processor_result_notifier_spy result_notifier_spy;
-  ASSERT_DEATH({ pusch_proc->process(data, std::move(rm_buffer), result_notifier_spy, grid, param.get_pdu()); },
-               param.expr);
+  ASSERT_DEATH(
+      { pusch_proc->process(data, std::move(rm_buffer), result_notifier_spy, grid, param.get_pdu()); }, param.expr);
 #endif // ASSERTS_ENABLED
 }
 

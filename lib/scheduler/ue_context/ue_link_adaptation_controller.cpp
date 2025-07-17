@@ -28,8 +28,7 @@ using namespace srsran;
 
 ue_link_adaptation_controller::ue_link_adaptation_controller(const cell_configuration&       cell_cfg_,
                                                              const ue_channel_state_manager& ue_channel_state) :
-  cell_cfg(cell_cfg_), ue_ch_st(ue_channel_state),
-  logger(srslog::fetch_basic_logger("UL_CTL"))
+  cell_cfg(cell_cfg_), ue_ch_st(ue_channel_state), logger(srslog::fetch_basic_logger("UL_CTL"))
 {
   if (cell_cfg.expert_cfg.ue.olla_cqi_inc > 0) {
     dl_olla.emplace(cell_cfg.expert_cfg.ue.olla_dl_target_bler,

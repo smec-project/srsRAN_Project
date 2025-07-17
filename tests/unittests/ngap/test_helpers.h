@@ -110,7 +110,7 @@ private:
 class dummy_ngap_message_handler : public ngap_message_handler
 {
 public:
-  dummy_ngap_message_handler() : logger(srslog::fetch_basic_logger("TEST")){};
+  dummy_ngap_message_handler() : logger(srslog::fetch_basic_logger("TEST")) {};
   void handle_message(const ngap_message& msg) override
   {
     last_msg = msg;
@@ -126,7 +126,7 @@ private:
 class dummy_ngap_rrc_ue_notifier : public ngap_rrc_ue_notifier
 {
 public:
-  dummy_ngap_rrc_ue_notifier() : logger(srslog::fetch_basic_logger("TEST")){};
+  dummy_ngap_rrc_ue_notifier() : logger(srslog::fetch_basic_logger("TEST")) {};
 
   void on_new_pdu(byte_buffer nas_pdu) override
   {
@@ -154,7 +154,7 @@ private:
 class dummy_ngap_cu_cp_notifier : public ngap_cu_cp_notifier
 {
 public:
-  dummy_ngap_cu_cp_notifier(ue_manager& ue_mng_) : ue_mng(ue_mng_), logger(srslog::fetch_basic_logger("TEST")){};
+  dummy_ngap_cu_cp_notifier(ue_manager& ue_mng_) : ue_mng(ue_mng_), logger(srslog::fetch_basic_logger("TEST")) {};
 
   void connect_ngap(ngap_ue_context_removal_handler& ngap_handler_) { ngap_handler = &ngap_handler_; }
 
@@ -392,7 +392,7 @@ class dummy_rrc_ngap_message_handler : public rrc_ngap_message_handler
 {
 public:
   dummy_rrc_ngap_message_handler(ue_index_t ue_index_) :
-    ue_index(ue_index_), logger(srslog::fetch_basic_logger("TEST")){};
+    ue_index(ue_index_), logger(srslog::fetch_basic_logger("TEST")) {};
 
   void handle_dl_nas_transport_message(byte_buffer nas_pdu) override
   {

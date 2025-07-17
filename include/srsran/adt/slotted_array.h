@@ -114,8 +114,8 @@ class slotted_vector_iter_impl
 {
   using iterator_type = slotted_vector_iter_impl<VectorData>;
   using elem_type     = std::conditional_t<std::is_const<VectorData>::value,
-                                       const typename VectorData::value_type,
-                                       typename VectorData::value_type>;
+                                           const typename VectorData::value_type,
+                                           typename VectorData::value_type>;
 
 public:
   using iterator_category = std::forward_iterator_tag;

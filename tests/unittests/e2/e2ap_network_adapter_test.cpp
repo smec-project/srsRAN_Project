@@ -137,7 +137,7 @@ protected:
   class e2_connection_client_wrapper : public e2_connection_client
   {
   public:
-    e2_connection_client_wrapper(e2_connection_client& e2_client_) : e2_client(e2_client_){};
+    e2_connection_client_wrapper(e2_connection_client& e2_client_) : e2_client(e2_client_) {};
 
     void on_e2_message_rx(const e2_message& msg)
     {
@@ -182,7 +182,7 @@ protected:
   class e2_sniffer : public e2_message_notifier
   {
   public:
-    e2_sniffer(e2ap_network_adapter_test& parent_) : logger(srslog::fetch_basic_logger("E2")){};
+    e2_sniffer(e2ap_network_adapter_test& parent_) : logger(srslog::fetch_basic_logger("E2")) {};
 
     /// E2 message handler functions.
     void on_new_message(const e2_message& msg) override

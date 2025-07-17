@@ -84,8 +84,12 @@ def get_kpis(
     total_ul_ko_ok = gnb_metrics.total.ul_nof_ok + gnb_metrics.total.ul_nof_ko
     total_dl_ko_ok = gnb_metrics.total.dl_nof_ok + gnb_metrics.total.dl_nof_ko
 
-    kpis.ul_bler_aggregate = 0 if not total_ul_ko_ok else gnb_metrics.total.ul_nof_ko / total_ul_ko_ok
-    kpis.dl_bler_aggregate = 0 if not total_dl_ko_ok else gnb_metrics.total.dl_nof_ko / total_dl_ko_ok
+    kpis.ul_bler_aggregate = (
+        0 if not total_ul_ko_ok else gnb_metrics.total.ul_nof_ko / total_ul_ko_ok
+    )
+    kpis.dl_bler_aggregate = (
+        0 if not total_dl_ko_ok else gnb_metrics.total.dl_nof_ko / total_dl_ko_ok
+    )
 
     # UE
     for ue in ue_array:
@@ -96,7 +100,9 @@ def get_kpis(
 
     # Viavi
     if viavi_kpis:
-        nof_failure = viavi_kpis.get_nof_procedure_failure_by_group("EMM_PROCEDURE", "attach")
+        nof_failure = viavi_kpis.get_nof_procedure_failure_by_group(
+            "EMM_PROCEDURE", "attach"
+        )
         if nof_failure:
             kpis.nof_attach_failures += nof_failure
 

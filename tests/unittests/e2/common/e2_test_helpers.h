@@ -69,7 +69,8 @@ public:
 class dummy_e2_pdu_notifier : public e2_message_notifier
 {
 public:
-  dummy_e2_pdu_notifier(e2_message_handler* handler_) : logger(srslog::fetch_basic_logger("TEST")), handler(handler_){};
+  dummy_e2_pdu_notifier(e2_message_handler* handler_) :
+    logger(srslog::fetch_basic_logger("TEST")), handler(handler_) {};
 
   void attach_handler(e2_message_handler* handler_) { handler = handler_; };
   void on_new_message(const e2_message& msg) override
@@ -349,7 +350,7 @@ public:
 class dummy_e2sm_kpm_du_meas_provider : public e2sm_kpm_meas_provider
 {
 public:
-  dummy_e2sm_kpm_du_meas_provider(){};
+  dummy_e2sm_kpm_du_meas_provider() {};
   std::vector<std::string> get_supported_metric_names(e2sm_kpm_metric_level_enum level) override
   {
     return supported_metrics;
@@ -503,7 +504,7 @@ private:
 class dummy_e2_subscription_mngr : public e2_subscription_manager
 {
 public:
-  dummy_e2_subscription_mngr() : logger(srslog::fetch_basic_logger("TEST")){};
+  dummy_e2_subscription_mngr() : logger(srslog::fetch_basic_logger("TEST")) {};
   e2_subscribe_reponse_message handle_subscription_setup(const asn1::e2ap::ric_sub_request_s& request) override
   {
     last_subscription = request;
@@ -690,7 +691,7 @@ inline e2_message generate_e2_ind_msg(byte_buffer& ind_hdr_bytes, byte_buffer& i
 class dummy_e2_message_handler : public e2_message_handler
 {
 public:
-  dummy_e2_message_handler() : logger(srslog::fetch_basic_logger("TEST")){};
+  dummy_e2_message_handler() : logger(srslog::fetch_basic_logger("TEST")) {};
   void handle_message(const e2_message& msg) override
   {
     last_msg = msg;
@@ -707,7 +708,7 @@ private:
 class dummy_e2_agent_mng : public e2ap_e2agent_notifier
 {
 public:
-  dummy_e2_agent_mng() : logger(srslog::fetch_basic_logger("TEST")){};
+  dummy_e2_agent_mng() : logger(srslog::fetch_basic_logger("TEST")) {};
   void on_e2_disconnection() override { logger.info("E2 connection closed."); }
 
 private:
@@ -718,7 +719,7 @@ private:
 class dummy_network_gateway_data_handler : public srsran::sctp_network_gateway_data_handler
 {
 public:
-  dummy_network_gateway_data_handler(){};
+  dummy_network_gateway_data_handler() {};
   void        handle_pdu(const byte_buffer& pdu) override { last_pdu = pdu.copy(); }
   byte_buffer last_pdu;
 };
@@ -726,7 +727,7 @@ public:
 class dummy_e2_adapter : public e2_message_handler, public e2_event_handler
 {
 public:
-  dummy_e2_adapter() : logger(srslog::fetch_basic_logger("E2")){};
+  dummy_e2_adapter() : logger(srslog::fetch_basic_logger("E2")) {};
 
   void connect_e2ap(e2_interface* e2ap_) { e2ap = e2ap_; }
   void handle_message(const e2_message& msg) override { e2ap->handle_message(msg); };
@@ -793,7 +794,7 @@ private:
 class dummy_du_configurator : public srs_du::du_configurator
 {
 public:
-  dummy_du_configurator(){};
+  dummy_du_configurator() {};
   async_task<srs_du::du_mac_sched_control_config_response>
   configure_ue_mac_scheduler(srs_du::du_mac_sched_control_config reconf) override
   {
