@@ -52,18 +52,15 @@ class PriorityManager:
     def register_ue(
         self, 
         rnti: str, 
-        app_id: str, 
         slo_latency: float
     ) -> None:
         """Register a new UE with its requirements.
         
         Args:
             rnti: Radio Network Temporary Identifier.
-            app_id: Application identifier.
             slo_latency: SLO latency requirement in milliseconds.
         """
         self.ue_info[rnti] = {
-            "app_id": app_id,
             "slo_latency": slo_latency,
         }
         
@@ -78,7 +75,7 @@ class PriorityManager:
         self.initialize_ue_priority(rnti)
         
         self.logger.log(
-            f"Registered UE - RNTI: {rnti}, App: {app_id}, "
+            f"Registered UE - RNTI: {rnti}, "
             f"SLO Latency: {slo_latency}ms"
         )
     

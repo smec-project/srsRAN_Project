@@ -40,7 +40,6 @@ class NetworkHandler:
         
         # Application server setup
         self.app_socket: Optional[socket.socket] = None
-        self.app_connections: Dict[str, socket.socket] = {}
         
         # RAN connections
         self.ran_metrics_socket: Optional[socket.socket] = None
@@ -174,16 +173,8 @@ class NetworkHandler:
             conn: Socket connection to the application.
             addr: Address of the application.
         """
-        app_id = None
         try:
-            # First message should be app registration with app_id
-            data = conn.recv(NetworkConstants.RECV_BUFFER_SIZE)
-            if not data:
-                return
-
-            app_id = data.decode("utf-8").strip()
-            self.app_connections[app_id] = conn
-            self.logger.log(f"Application {app_id} registered from {addr}")
+            self.logger.log(f"Application connected from {addr}")
 
             while self.running:
                 try:
@@ -192,7 +183,7 @@ class NetworkHandler:
                         break
 
                     message = data.decode("utf-8").strip()
-                    self._process_app_message(message, app_id)
+                    self._process_app_message(message)
 
                 except Exception as e:
                     self.logger.log(f"Error processing application message: {e}")
@@ -201,35 +192,31 @@ class NetworkHandler:
         except Exception as e:
             self.logger.log(f"Error in application message handler: {e}")
         finally:
-            if app_id and app_id in self.app_connections:
-                del self.app_connections[app_id]
             conn.close()
     
-    def _process_app_message(self, message: str, app_id: str) -> None:
+    def _process_app_message(self, message: str) -> None:
         """Process a message from an application.
         
         Args:
             message: The message string to process.
-            app_id: Application identifier.
         """
         try:
             msg_parts = message.split("|")
             msg_type = msg_parts[0]
 
             if msg_type == MessageTypes.NEW_UE:
-                self._handle_new_ue_message(msg_parts, app_id)
+                self._handle_new_ue_message(msg_parts)
             else:
                 self.logger.log(f"Unknown message type: {msg_type}")
                 
         except Exception as e:
             self.logger.log(f"Error processing app message '{message}': {e}")
     
-    def _handle_new_ue_message(self, msg_parts: list, app_id: str) -> None:
+    def _handle_new_ue_message(self, msg_parts: list) -> None:
         """Handle NEW_UE message from application.
         
         Args:
             msg_parts: Message parts split by '|'.
-            app_id: Application identifier.
         """
         if len(msg_parts) != 3:
             self.logger.log(f"Invalid NEW_UE message format: {msg_parts}")
@@ -238,7 +225,7 @@ class NetworkHandler:
         _, rnti, slo_latency = msg_parts
         
         self.priority_manager.register_ue(
-            rnti, app_id, 
+            rnti, 
             float(slo_latency)
         )
 
@@ -317,13 +304,7 @@ class NetworkHandler:
         self.running = False
 
         # Close all application connections
-        for conn in self.app_connections.values():
-            try:
-                conn.shutdown(socket.SHUT_RDWR)
-                conn.close()
-            except:
-                pass
-        self.app_connections.clear()
+        # The app_connections dictionary is removed, so this loop is no longer needed.
 
         # Close server sockets
         sockets_to_close = [
@@ -353,5 +334,5 @@ class NetworkHandler:
             "app_server_active": self.app_socket is not None,
             "ran_metrics_connected": self.ran_metrics_socket is not None,
             "ran_control_connected": self.ran_control_socket is not None,
-            "active_app_connections": len(self.app_connections)
+            "active_app_connections": 0 # No longer tracking active app connections
         } 
