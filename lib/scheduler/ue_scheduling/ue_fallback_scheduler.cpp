@@ -203,8 +203,7 @@ void ue_fallback_scheduler::handle_sr_indication(du_ue_index_t ue_index)
     logger.error("ue_index={} not found in the scheduler", ue_index);
     return;
   }
-  logger.error("XIAO: ue_index={} request resources", ue_index);
-  // std::cout << "XIAO: ue_index=" << ue_index << " request resources" << std::endl;
+  // logger.error("XIAO: ue_index={} request resources", ue_index);
 
   auto ue_it = std::find(pending_ul_ues.begin(), pending_ul_ues.end(), ue_index);
 

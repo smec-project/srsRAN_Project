@@ -151,7 +151,7 @@ sch_mcs_index ue_link_adaptation_controller::calculate_ul_mcs(pusch_mcs_table mc
   // Derive MCS using the combination of estimated UL SNR + outer loop link adaptation.
   sch_mcs_index mcs = map_snr_to_mcs_ul(get_effective_snr(), mcs_table);
   mcs               = std::min(std::max(mcs, ul_mcs_lims.start()), ul_mcs_lims.stop());
-  logger.error("XIAO: snr = {}, next_mcs = {}", get_effective_snr(), mcs);
+  // logger.error("XIAO: snr = {}, next_mcs = {}", get_effective_snr(), mcs);
 
   return mcs;
 }

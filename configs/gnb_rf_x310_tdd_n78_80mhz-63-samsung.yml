@@ -45,7 +45,7 @@ cell_cfg:
 
 log:
   filename: stdout
-  all_level: info
+  all_level: warning
 
 pcap:
   mac_enable: false

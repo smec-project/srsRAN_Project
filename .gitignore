@@ -4,3 +4,5 @@ models
 eval_data
 raw_data
 tutti_controller
+*.log
+__pycache__

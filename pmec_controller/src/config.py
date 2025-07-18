@@ -81,4 +81,4 @@ class DefaultPaths:
     """Default file paths for model and data files."""
     MODEL_PATH = "decision_tree/models/bsr_only_xgboost.joblib"
     SCALER_PATH = "decision_tree/models/bsr_only_scaler.joblib"
-    LOG_FILE = "controller.txt" 
+    LOG_FILE = "controller.log" 
