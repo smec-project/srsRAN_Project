@@ -6,7 +6,6 @@ determines whether to use the --base-dir parameter based on the presence of
 corresponding eval_data folders.
 """
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Set, List, Optional
@@ -15,12 +14,15 @@ from typing import Set, List, Optional
 def execute_pets_train_data_label(
     file_path: Path, use_base_dir: bool = False
 ) -> bool:
-    """Execute the pets_train_data_label.py script for a given file.
+    """
+    Execute the pets_train_data_label.py script for a given file.
 
-    Args:     file_path: Path to the text file to be processed. use_base_dir:
-    Boolean flag to indicate if --base-dir parameter should be used.
-
-    Returns:     True if processing succeeded, False otherwise.
+    Args:
+        file_path: Path to the text file to be processed.
+        use_base_dir: Boolean flag to indicate if --base-dir parameter should be
+        used.
+    Returns:
+        True if processing succeeded, False otherwise.
     """
     cmd = ["python3", "pets_train_data_label.py", str(file_path)]
     if use_base_dir:
@@ -36,11 +38,13 @@ def execute_pets_train_data_label(
 
 
 def find_txt_files_in_directories(search_dirs: List[str]) -> List[Path]:
-    """Find all .txt files in the specified directories.
+    """
+    Find all .txt files in the specified directories.
 
-    Args:     search_dirs: List of directory paths to search for txt files.
-
-    Returns:     List of Path objects for all found .txt files.
+    Args:
+        search_dirs: List of directory paths to search for txt files.
+    Returns:
+        List of Path objects for all found .txt files.
     """
     txt_files = []
 
@@ -63,9 +67,11 @@ def find_txt_files_in_directories(search_dirs: List[str]) -> List[Path]:
 
 
 def get_eval_data_folders() -> Set[str]:
-    """Get all folder names in the eval_data directory.
+    """
+    Get all folder names in the eval_data directory.
 
-    Returns:     Set of folder names in eval_data directory.
+    Returns:
+            Set of folder names in eval_data directory.
     """
     eval_data_path = Path("eval_data")
     if not eval_data_path.exists():
@@ -78,14 +84,14 @@ def get_eval_data_folders() -> Set[str]:
 
 
 def should_use_base_dir(txt_file: Path, eval_folders: Set[str]) -> bool:
-    """Determine if a txt file should use the --base-dir parameter.
+    """
+    Determine if a txt file should use the --base-dir parameter.
 
     Args:
-    txt_file: Path to the text file.
-    eval_folders: Set of folder names in eval_data directory.
-
+        txt_file: Path to the text file.
+        eval_folders: Set of folder names in eval_data directory.
     Returns:
-    True if the file should use --base-dir parameter, False otherwise.
+        True if the file should use --base-dir parameter, False otherwise.
     """
     file_stem = txt_file.stem  # Get filename without extension
     return file_stem in eval_folders
@@ -94,13 +100,15 @@ def should_use_base_dir(txt_file: Path, eval_folders: Set[str]) -> bool:
 def process_all_txt_files(
     search_directories: Optional[List[str]] = None,
 ) -> None:
-    """Process all txt files found in the specified directories.
+    """
+    Process all txt files found in the specified directories.
 
-    Args:     search_directories: List of directories to search. If None,
-    defaults to current directory.
+    Args:
+        search_directories: List of directories to search. If None, defaults to
+        raw_data directory.
     """
     if search_directories is None:
-        search_directories = ["."]
+        search_directories = ["raw_data"]
 
     # Get all eval_data folders
     eval_folders = get_eval_data_folders()
@@ -143,18 +151,7 @@ def process_all_txt_files(
 
 
 def main():
-    """Main function to orchestrate the txt file processing.
-
-    You can modify the search_dirs list to include additional directories where
-    txt files might be located.
-    """
-    # Configure directories to search for txt files
-    # Add more directories as needed
-    search_dirs = [
-        ".",  # Current directory
-        "raw_data",  # Raw data directory
-        # Add more directories here as needed
-    ]
+    search_dirs = ["raw_data"]
 
     print("Starting batch processing of txt files...")
     process_all_txt_files(search_dirs)
