@@ -66,9 +66,6 @@ class NetworkConstants:
 class MessageTypes:
     """Constants for message types."""
     NEW_UE = "NEW_UE"
-    REQUEST = "REQUEST"
-    START = "Start"
-    DONE = "DONE"
     
     # RAN metrics types
     PRB = "PRB"

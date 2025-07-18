@@ -7,7 +7,7 @@ import time
 from typing import Dict, Optional, Callable
 
 from .config import ControllerConfig, MessageTypes, NetworkConstants
-from .utils import Logger, format_rnti_string, get_current_timestamp, calculate_elapsed_time_ms
+from .utils import Logger, format_rnti_string, get_current_timestamp
 from .priority_manager import PriorityManager
 
 
@@ -45,9 +45,6 @@ class NetworkHandler:
         # RAN connections
         self.ran_metrics_socket: Optional[socket.socket] = None
         self.ran_control_socket: Optional[socket.socket] = None
-        
-        # Request tracking for applications
-        self.request_start_times: Dict[str, Dict[int, float]] = {}
         
         # Callback for RAN metrics processing
         self.metrics_callback: Optional[Callable[[str], None]] = None
@@ -221,12 +218,6 @@ class NetworkHandler:
 
             if msg_type == MessageTypes.NEW_UE:
                 self._handle_new_ue_message(msg_parts, app_id)
-            elif msg_type == MessageTypes.START:
-                self._handle_start_message(msg_parts)
-            elif msg_type == MessageTypes.REQUEST:
-                self._handle_request_message(msg_parts)
-            elif msg_type == MessageTypes.DONE:
-                self._handle_done_message(msg_parts)
             else:
                 self.logger.log(f"Unknown message type: {msg_type}")
                 
@@ -250,74 +241,7 @@ class NetworkHandler:
             rnti, app_id, ue_idx, 
             float(latency_req), int(request_size)
         )
-        
-        # Initialize request tracking
-        self.request_start_times[rnti] = {}
-    
-    def _handle_start_message(self, msg_parts: list) -> None:
-        """Handle Start message from application.
-        
-        Args:
-            msg_parts: Message parts split by '|'.
-        """
-        if len(msg_parts) != 3:
-            self.logger.log(f"Invalid Start message format: {msg_parts}")
-            return
-        
-        _, rnti, seq_num = msg_parts
-        current_time = get_current_timestamp()
-        
-        self.logger.log(
-            f"Request {seq_num} from RNTI {rnti} start at {current_time}"
-        )
-    
-    def _handle_request_message(self, msg_parts: list) -> None:
-        """Handle REQUEST message from application.
-        
-        Args:
-            msg_parts: Message parts split by '|'.
-        """
-        if len(msg_parts) != 3:
-            self.logger.log(f"Invalid REQUEST message format: {msg_parts}")
-            return
-        
-        _, rnti, seq_num = msg_parts
-        seq_num = int(seq_num)
 
-        if rnti in self.priority_manager.ue_info:
-            # Store request start time
-            if rnti not in self.request_start_times:
-                self.request_start_times[rnti] = {}
-            self.request_start_times[rnti][seq_num] = get_current_timestamp()
-        else:
-            self.logger.log(f"Warning: Request for unknown RNTI {rnti}")
-    
-    def _handle_done_message(self, msg_parts: list) -> None:
-        """Handle DONE message from application.
-        
-        Args:
-            msg_parts: Message parts split by '|'.
-        """
-        if len(msg_parts) != 3:
-            self.logger.log(f"Invalid DONE message format: {msg_parts}")
-            return
-        
-        _, rnti, seq_num = msg_parts
-        seq_num = int(seq_num)
-
-        # Calculate final processing time
-        if (rnti in self.request_start_times and 
-            seq_num in self.request_start_times[rnti]):
-            
-            start_time = self.request_start_times[rnti][seq_num]
-            elapsed_time_ms = calculate_elapsed_time_ms(start_time)
-            
-            self.logger.log(
-                f"Request {seq_num} from RNTI {rnti} completed "
-                f"in {elapsed_time_ms:.2f}ms at {get_current_timestamp()}"
-            )
-            
-            del self.request_start_times[rnti][seq_num]
     
     def _handle_ran_metrics(self) -> None:
         """Receive and process RAN metrics."""
@@ -418,7 +342,7 @@ class NetworkHandler:
 
         self.logger.log("Network connections closed")
     
-    def get_connection_status(self) -> Dict[str, bool]:
+    def get_connection_status(self) -> Dict[str, any]:
         """Get status of all network connections.
         
         Returns:

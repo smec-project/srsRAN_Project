@@ -303,9 +303,5 @@ class PmecController:
         if rnti in self.metrics_processor.ue_peak_buffer_size:
             del self.metrics_processor.ue_peak_buffer_size[rnti]
         
-        # Clean up in network handler
-        if rnti in self.network_handler.request_start_times:
-            del self.network_handler.request_start_times[rnti]
-        
         self.logger.log(f"Cleaned up all data for RNTI {rnti}")
         return True 

@@ -151,8 +151,8 @@ void srsran_scheduler_adapter::handle_ul_bsr_indication(const mac_bsr_ce_info& b
         ul_bsr_ind.reported_lcgs.push_back(ul_bsr_lcg_report{uint_to_lcg_id(j), 0U});
       }
     } else {
-      logger.error(
-          "XIAO [scheduler_adapter]: ue_index={} reports its buffer status {}", bsr.ue_index, sched_bsr.nof_bytes);
+      // logger.error(
+      //     "XIAO: [scheduler_adapter]: ue_index={} reports its buffer status {}", bsr.ue_index, sched_bsr.nof_bytes);
       ul_bsr_ind.reported_lcgs.push_back(sched_bsr);
     }
   } else {
