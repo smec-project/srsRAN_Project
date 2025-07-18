@@ -30,6 +30,7 @@
 #include "srsran/ran/du_types.h"
 #include "srsran/srslog/srslog.h"
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <netinet/in.h>
 #include <string>
@@ -71,10 +72,23 @@ struct bsr_metrics : public base_metrics {
 };
 
 /// \brief Class responsible for sending scheduler metrics over TCP connection.
+///
+/// Sends metrics in binary format as 4 32-bit integers:
+/// - PRB: [type=0][rnti][prbs][slot]
+/// - SR:  [type=1][rnti][slot][0]
+/// - BSR: [type=2][rnti][bytes][slot]
 class scheduler_metrics_sender
 {
 public:
   static constexpr int DEFAULT_METRICS_PORT = 5556;
+
+  // Binary message structure: 4 x 32-bit integers = 16 bytes
+  struct metrics_message {
+    uint32_t type;   // 0=PRB, 1=SR, 2=BSR
+    uint32_t rnti;   // RNTI value
+    uint32_t field1; // PRBs/slot/bytes depending on type
+    uint32_t field2; // slot/0/slot depending on type
+  };
 
   static scheduler_metrics_sender& instance()
   {
@@ -101,22 +115,22 @@ public:
   /// \brief Stop the TCP server and cleanup resources.
   void stop();
 
-  /// \brief Send UE scheduling metrics to connected client.
-  /// \param[in] msg Message to send.
+  /// \brief Send binary message to connected client.
+  /// \param[in] msg Binary message to send.
   /// \return True if message was sent successfully, false otherwise.
-  bool send_message(const std::string& msg);
+  bool send_binary_message(const metrics_message& msg);
 
   bool send_prb_metrics(const prb_metrics& metrics);
   bool send_sr_metrics(const sr_metrics& metrics);
   bool send_bsr_metrics(const bsr_metrics& metrics);
 
 private:
-  /// \brief Format metrics into JSON string.
+  /// \brief Create binary metrics message.
   /// \param[in] metrics UE scheduling metrics to format.
-  /// \return Formatted JSON string.
-  std::string format_prb_metrics(const prb_metrics& metrics);
-  std::string format_sr_metrics(const sr_metrics& metrics);
-  std::string format_bsr_metrics(const bsr_metrics& metrics);
+  /// \return Binary message structure.
+  metrics_message create_prb_message(const prb_metrics& metrics);
+  metrics_message create_sr_message(const sr_metrics& metrics);
+  metrics_message create_bsr_message(const bsr_metrics& metrics);
 
   /// \brief Thread function to handle incoming connections.
   void accept_connections();

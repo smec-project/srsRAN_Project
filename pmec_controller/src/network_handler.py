@@ -3,10 +3,10 @@
 import socket
 import struct
 import threading
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, Any
 
 from .config import ControllerConfig, MessageTypes, NetworkConstants
-from .utils import Logger, format_rnti_string
+from .utils import Logger
 from .priority_manager import PriorityManager
 
 
@@ -45,7 +45,7 @@ class NetworkHandler:
         self.ran_control_socket: Optional[socket.socket] = None
         
         # Callback for RAN metrics processing
-        self.metrics_callback: Optional[Callable[[str], None]] = None
+        self.metrics_callback: Optional[Callable[[bytes], None]] = None
     
     def setup_connections(self) -> bool:
         """Set up all network connections.
@@ -140,7 +140,7 @@ class NetworkHandler:
         self.logger.log("Network handling threads started")
         return True
     
-    def set_metrics_callback(self, callback: Callable[[str], None]) -> None:
+    def set_metrics_callback(self, callback: Callable[[bytes], None]) -> None:
         """Set callback function for RAN metrics processing.
         
         Args:
@@ -181,8 +181,7 @@ class NetworkHandler:
                     if not data:
                         break
 
-                    message = data.decode("utf-8").strip()
-                    self._process_slo_ctrl_message(message)
+                    self._process_slo_ctrl_message(data)
 
                 except Exception as e:
                     self.logger.log(f"Error processing SLO control plane message: {e}")
@@ -193,54 +192,44 @@ class NetworkHandler:
         finally:
             conn.close()
     
-    def _process_slo_ctrl_message(self, message: str) -> None:
-        """Process a message from SLO control plane.
+    def _process_slo_ctrl_message(self, data: bytes) -> None:
+        """Process a binary message from SLO control plane.
         
         Args:
-            message: The message string to process.
+            data: The binary message data to process.
         """
         try:
-            msg_parts = message.split("|")
-            msg_type = msg_parts[0]
-
-            if msg_type == MessageTypes.NEW_UE:
-                self._handle_new_ue_message(msg_parts)
+            # Expect 12 bytes: uint32 (message_type) + uint32 (rnti) + uint32 (slo_latency)
+            if len(data) != 12:
+                self.logger.log(f"Invalid SLO control message size: {len(data)} bytes, expected 12")
+                return
+            
+            # Unpack: uint32 message_type, uint32 RNTI, uint32 SLO latency
+            msg_type, rnti, slo_latency_uint = struct.unpack('=III', data)
+            
+            if msg_type == MessageTypes.SLO_MESSAGE:
+                # Convert uint32 SLO latency to float
+                slo_latency_float = float(slo_latency_uint)
+                self.priority_manager.register_ue(rnti, slo_latency_float)
             else:
                 self.logger.log(f"Unknown message type: {msg_type}")
-                
+            
         except Exception as e:
-            self.logger.log(f"Error processing SLO control plane message '{message}': {e}")
-    
-    def _handle_new_ue_message(self, msg_parts: list) -> None:
-        """Handle NEW_UE message from SLO control plane.
-        
-        Args:
-            msg_parts: Message parts split by '|'.
-        """
-        if len(msg_parts) != 3:
-            self.logger.log(f"Invalid NEW_UE message format: {msg_parts}")
-            return
-        
-        _, rnti, slo_latency = msg_parts
-        
-        self.priority_manager.register_ue(
-            rnti, 
-            float(slo_latency)
-        )
+            self.logger.log(f"Error processing SLO control plane binary message: {e}")
 
     
     def _handle_ran_metrics(self) -> None:
-        """Receive and process RAN metrics."""
+        """Receive and process binary RAN metrics."""
         while self.running and self.ran_metrics_socket:
             try:
                 data = self.ran_metrics_socket.recv(
                     NetworkConstants.RECV_BUFFER_SIZE
-                ).decode("utf-8")
+                )
                 
                 if not data:
                     continue
 
-                # Forward to metrics processor via callback
+                # Forward binary data to metrics processor via callback
                 if self.metrics_callback:
                     self.metrics_callback(data)
 
@@ -248,11 +237,11 @@ class NetworkHandler:
                 if self.running:  # Only log if we're still supposed to be running
                     self.logger.log(f"Error receiving RAN metrics: {e}")
     
-    def send_priority_update(self, rnti: str, priority: float, reset: bool = False) -> bool:
+    def send_priority_update(self, rnti: int, priority: float, reset: bool = False) -> bool:
         """Send priority update to RAN.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             priority: Priority value to set.
             reset: Whether this is a priority reset.
             
@@ -264,9 +253,8 @@ class NetworkHandler:
                 self.logger.log("RAN control socket not available")
                 return False
             
-            # Format RNTI string and pack message
-            rnti_bytes = format_rnti_string(rnti, NetworkConstants.RNTI_STRING_LENGTH)
-            msg = struct.pack("=5sdb", rnti_bytes, priority, reset)
+            # Pack message with RNTI as integer
+            msg = struct.pack("=IdB", rnti, priority, reset)
 
             self.ran_control_socket.send(msg)
             return True
@@ -275,11 +263,11 @@ class NetworkHandler:
             self.logger.log(f"Failed to send priority update: {e}")
             return False
     
-    def set_priority(self, rnti: str, priority: float) -> bool:
+    def set_priority(self, rnti: int, priority: float) -> bool:
         """Send priority update to RAN.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             priority: Priority value to set.
             
         Returns:
@@ -287,11 +275,11 @@ class NetworkHandler:
         """
         return self.send_priority_update(rnti, priority, reset=False)
     
-    def reset_priority(self, rnti: str) -> bool:
+    def reset_priority(self, rnti: int) -> bool:
         """Reset priority for a specific RNTI.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             True if reset was sent successfully.
@@ -322,7 +310,7 @@ class NetworkHandler:
 
         self.logger.log("Network connections closed")
     
-    def get_connection_status(self) -> Dict[str, any]:
+    def get_connection_status(self) -> Dict[str, Any]:
         """Get status of all network connections.
         
         Returns:

@@ -40,20 +40,6 @@ class Logger:
             self.log_file.close()
             self.log_file = None
 
-
-def format_rnti_string(rnti: str, length: int = 4) -> bytes:
-    """Format RNTI string for network transmission.
-    
-    Args:
-        rnti: The RNTI string to format.
-        length: Target length for padding.
-        
-    Returns:
-        Formatted RNTI as bytes with ASCII encoding.
-    """
-    return f"{rnti:<{length}}".encode("ascii")
-
-
 def get_current_timestamp() -> float:
     """Get current timestamp in seconds.
     

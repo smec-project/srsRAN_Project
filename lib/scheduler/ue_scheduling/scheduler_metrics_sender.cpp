@@ -21,7 +21,6 @@
  */
 
 #include "scheduler_metrics_sender.h"
-#include "fmt/format.h"
 #include <fcntl.h> // For fcntl flags
 #include <iostream>
 #include <mutex>
@@ -104,7 +103,7 @@ void scheduler_metrics_sender::stop()
   }
 }
 
-bool scheduler_metrics_sender::send_message(const std::string& msg)
+bool scheduler_metrics_sender::send_binary_message(const metrics_message& msg)
 {
   std::lock_guard<std::mutex> lock(mutex);
 
@@ -129,8 +128,8 @@ bool scheduler_metrics_sender::send_message(const std::string& msg)
     return false; // Skip sending if no client
   }
 
-  // Non-blocking send
-  ssize_t sent = send(client_fd, msg.c_str(), msg.length(), MSG_DONTWAIT | MSG_NOSIGNAL);
+  // Non-blocking send binary data
+  ssize_t sent = send(client_fd, &msg, sizeof(msg), MSG_DONTWAIT | MSG_NOSIGNAL);
   if (sent < 0) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
       // Just close client socket and wait for new connection
@@ -144,44 +143,53 @@ bool scheduler_metrics_sender::send_message(const std::string& msg)
   return true;
 }
 
-std::string scheduler_metrics_sender::format_prb_metrics(const prb_metrics& metrics)
+scheduler_metrics_sender::metrics_message scheduler_metrics_sender::create_prb_message(const prb_metrics& metrics)
 {
-  return fmt::format("TYPE=PRB,UE_IDX={},RNTI={:#6x},PRBs={},SLOT={}\n",
-                     metrics.ue_index,
-                     (unsigned)metrics.crnti,
-                     metrics.nof_prbs,
-                     metrics.slot.to_uint());
+  // Format: [type=0][rnti][prbs][slot]
+  metrics_message msg;
+  msg.type   = 0;
+  msg.rnti   = (uint32_t)metrics.crnti;
+  msg.field1 = metrics.nof_prbs;
+  msg.field2 = metrics.slot.to_uint();
+  return msg;
 }
 
-std::string scheduler_metrics_sender::format_sr_metrics(const sr_metrics& metrics)
+scheduler_metrics_sender::metrics_message scheduler_metrics_sender::create_sr_message(const sr_metrics& metrics)
 {
-  return fmt::format(
-      "TYPE=SR,UE_IDX={},RNTI={:#6x},SLOT={}\n", metrics.ue_index, (unsigned)metrics.crnti, metrics.slot.to_uint());
+  // Format: [type=1][rnti][slot][0]
+  metrics_message msg;
+  msg.type   = 1;
+  msg.rnti   = (uint32_t)metrics.crnti;
+  msg.field1 = metrics.slot.to_uint();
+  msg.field2 = 0; // Unused field for SR
+  return msg;
 }
 
 bool scheduler_metrics_sender::send_prb_metrics(const prb_metrics& metrics)
 {
-  std::string msg = format_prb_metrics(metrics);
-  return send_message(msg);
+  metrics_message msg = create_prb_message(metrics);
+  return send_binary_message(msg);
 }
 
 bool scheduler_metrics_sender::send_sr_metrics(const sr_metrics& metrics)
 {
-  std::string msg = format_sr_metrics(metrics);
-  return send_message(msg);
+  metrics_message msg = create_sr_message(metrics);
+  return send_binary_message(msg);
 }
 
-std::string scheduler_metrics_sender::format_bsr_metrics(const bsr_metrics& metrics)
+scheduler_metrics_sender::metrics_message scheduler_metrics_sender::create_bsr_message(const bsr_metrics& metrics)
 {
-  return fmt::format("TYPE=BSR,UE_IDX={},RNTI={:#6x},BYTES={},SLOT={}\n",
-                     metrics.ue_index,
-                     (unsigned)metrics.crnti,
-                     metrics.nof_bytes,
-                     metrics.slot_rx.to_uint());
+  // Format: [type=2][rnti][bytes][slot]
+  metrics_message msg;
+  msg.type   = 2;
+  msg.rnti   = (uint32_t)metrics.crnti;
+  msg.field1 = metrics.nof_bytes;
+  msg.field2 = metrics.slot_rx.to_uint();
+  return msg;
 }
 
 bool scheduler_metrics_sender::send_bsr_metrics(const bsr_metrics& metrics)
 {
-  std::string msg = format_bsr_metrics(metrics);
-  return send_message(msg);
+  metrics_message msg = create_bsr_message(metrics);
+  return send_binary_message(msg);
 }

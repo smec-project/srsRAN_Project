@@ -1,9 +1,10 @@
 """RAN metrics processing functionality for PMEC Controller."""
 
-from typing import Dict, List, Optional
+import struct
+from typing import Dict, List, Optional, Any
 from collections import deque
 
-from .config import MessageTypes, EventTypes
+from .config import EventTypes
 from .utils import Logger, get_current_timestamp
 from .event_processor import EventProcessor
 from .priority_manager import PriorityManager
@@ -37,75 +38,75 @@ class MetricsProcessor:
         self.model_inference = model_inference
         self.logger = logger
         
-        # Track BSR events for FIFO queue management
-        self.ue_bsr_events: Dict[str, deque] = {}
-        self.ue_last_bsr: Dict[str, tuple] = {}
-        self.ue_peak_buffer_size: Dict[str, int] = {}
+        # Track BSR events for FIFO queue management - using int RNTI as keys
+        self.ue_bsr_events: Dict[int, deque] = {}
+        self.ue_last_bsr: Dict[int, tuple] = {}
+        self.ue_peak_buffer_size: Dict[int, int] = {}
     
-    def process_metrics_data(self, data: str) -> None:
-        """Process incoming RAN metrics data.
+    def process_metrics_data(self, data: bytes) -> None:
+        """Process incoming RAN metrics binary data.
         
         Args:
-            data: Raw metrics data string from RAN.
+            data: Raw binary metrics data from RAN.
         """
         try:
-            for line in data.strip().split("\n"):
-                if not line.strip():
-                    continue
+            # Each message is 16 bytes (4 x 32-bit integers)
+            message_size = 16
+            offset = 0
+            
+            while offset + message_size <= len(data):
+                # Unpack 4 32-bit unsigned integers in native byte order
+                msg_type, rnti, field1, field2 = struct.unpack('IIII', data[offset:offset + message_size])
                 
-                # Parse key-value pairs
-                values = dict(item.split("=") for item in line.split(","))
-                msg_type = values.get("TYPE", "")
-                
-                if msg_type == MessageTypes.PRB:
-                    self._handle_prb_metrics(values)
-                elif msg_type == MessageTypes.SR:
-                    self._handle_sr_metrics(values)
-                elif msg_type == MessageTypes.BSR:
-                    self._handle_bsr_metrics(values)
+                if msg_type == 0:  # PRB
+                    self._handle_prb_metrics(rnti, field1, field2)
+                elif msg_type == 1:  # SR
+                    self._handle_sr_metrics(rnti, field1)
+                elif msg_type == 2:  # BSR
+                    self._handle_bsr_metrics(rnti, field1, field2)
                 else:
                     self.logger.log(f"Unknown metrics type: {msg_type}")
+                
+                offset += message_size
                     
         except Exception as e:
-            self.logger.log(f"Error processing metrics data: {e}")
+            self.logger.log(f"Error processing binary metrics data: {e}")
     
-    def _handle_sr_metrics(self, values: Dict[str, str]) -> None:
+    def _handle_sr_metrics(self, rnti: int, slot: int) -> None:
         """Handle SR (Scheduling Request) metrics.
         
         Args:
-            values: Parsed metrics values dictionary.
+            rnti: RNTI value as integer.
+            slot: Slot number.
         """
         try:
-            rnti = values["RNTI"][-4:]  # Get last 4 characters
-            slot = int(values["SLOT"])
             timestamp = get_current_timestamp()
             
             self.logger.log(
-                f"SR received from RNTI=0x{rnti}, slot={slot} at {timestamp}"
+                f"SR received from RNTI=0x{rnti:x}, slot={slot} at {timestamp}"
             )
             
-            # Add event to processor
+            # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "SR", timestamp, slot)
             
             # Update remaining times in priority manager
             self.priority_manager.update_remaining_times(rnti, timestamp)
             
-        except (KeyError, ValueError) as e:
-            self.logger.log(f"Error parsing SR metrics: {e}")
+        except Exception as e:
+            self.logger.log(f"Error processing SR metrics: {e}")
     
-    def _handle_bsr_metrics(self, values: Dict[str, str]) -> None:
+    def _handle_bsr_metrics(self, rnti: int, bytes_val: int, slot: int) -> None:
         """Handle BSR (Buffer Status Report) metrics.
         
         Args:
-            values: Parsed metrics values dictionary.
+            rnti: RNTI value as integer.
+            bytes_val: Buffer size in bytes.
+            slot: Slot number.
         """
         try:
-            rnti = values["RNTI"][-4:]  # Get last 4 characters
-            slot = int(values["SLOT"])
-            bytes_val = int(values["BYTES"])
             timestamp = get_current_timestamp()
             
-            # Update priority manager state
+            # Update priority manager state - use rnti directly as integer
             self.priority_manager.update_bsr_state(rnti, bytes_val)
             self.priority_manager.update_remaining_times(rnti, timestamp)
             
@@ -124,50 +125,49 @@ class MetricsProcessor:
             )
             
             self.logger.log(
-                f"BSR received from RNTI=0x{rnti}, slot={slot}, "
+                f"BSR received from RNTI=0x{rnti:x}, slot={slot}, "
                 f"bytes={bytes_val} at {timestamp}"
             )
             
-            # Add event to processor
+            # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "BSR", timestamp, slot, bytes=bytes_val)
             
             # Process window update and inference
             self._process_bsr_window_update(rnti)
             
-        except (KeyError, ValueError) as e:
-            self.logger.log(f"Error parsing BSR metrics: {e}")
+        except Exception as e:
+            self.logger.log(f"Error processing BSR metrics: {e}")
     
-    def _handle_prb_metrics(self, values: Dict[str, str]) -> None:
+    def _handle_prb_metrics(self, rnti: int, prbs: int, slot: int) -> None:
         """Handle PRB (Physical Resource Block) allocation metrics.
         
         Args:
-            values: Parsed metrics values dictionary.
+            rnti: RNTI value as integer.
+            prbs: Number of PRBs allocated.
+            slot: Slot number.
         """
         try:
-            rnti = values["RNTI"][-4:]  # Get last 4 characters
-            slot = int(values["SLOT"])
-            prbs = int(values["PRBs"])
             timestamp = get_current_timestamp()
             
             self.logger.log(
-                f"PRB received from RNTI=0x{rnti}, slot={slot}, "
+                f"PRB received from RNTI=0x{rnti:x}, slot={slot}, "
                 f"prbs={prbs} at {timestamp}"
             )
             
-            # Add event to processor
+            # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "PRB", timestamp, slot, prbs=prbs)
             
             # Update remaining times in priority manager
             self.priority_manager.update_remaining_times(rnti, timestamp)
             
-        except (KeyError, ValueError) as e:
-            self.logger.log(f"Error parsing PRB metrics: {e}")
+        except Exception as e:
+            self.logger.log(f"Error processing PRB metrics: {e}")
     
-    def _process_bsr_window_update(self, rnti: str) -> None:
+    def _process_bsr_window_update(self, rnti: int) -> None:
         """Process window update and inference when BSR arrives.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
         """
         try:
             # Trim window and check if ready for analysis
@@ -212,11 +212,11 @@ class MetricsProcessor:
                 )
                 
         except Exception as e:
-            self.logger.log(f"Error in BSR window update for RNTI {rnti}: {e}")
+            self.logger.log(f"Error in BSR window update for RNTI 0x{rnti:x}: {e}")
     
     def _process_prediction_result(
         self,
-        rnti: str,
+        rnti: int,
         final_prediction: bool,
         bsr_increased: bool,
         model_prediction: Optional[float],
@@ -227,7 +227,7 @@ class MetricsProcessor:
         """Process the prediction result and update request tracking.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             final_prediction: Final prediction result.
             bsr_increased: Whether BSR increased.
             model_prediction: Model prediction value (can be None).
@@ -252,7 +252,7 @@ class MetricsProcessor:
     
     def _add_predicted_request(
         self,
-        rnti: str,
+        rnti: int,
         latest_bsr,
         prev_bsr,
         bsr_indices: List[int]
@@ -260,13 +260,13 @@ class MetricsProcessor:
         """Add a new predicted request for a UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             latest_bsr: Latest BSR event data.
             prev_bsr: Previous BSR event data.
             bsr_indices: List of BSR indices in the window.
         """
         if rnti not in self.priority_manager.ue_info:
-            self.logger.log(f"Cannot add request for unknown RNTI {rnti}")
+            self.logger.log(f"Cannot add request for unknown RNTI 0x{rnti:x}")
             return
         
         # Calculate initial remaining time
@@ -316,7 +316,7 @@ class MetricsProcessor:
     
     def _log_prediction_result(
         self,
-        rnti: str,
+        rnti: int,
         final_prediction: bool,
         bsr_increased: bool,
         model_prediction: Optional[float]
@@ -324,14 +324,14 @@ class MetricsProcessor:
         """Log the prediction result and current state.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             final_prediction: Final prediction result.
             bsr_increased: Whether BSR increased.
             model_prediction: Model prediction value (can be None).
         """
         timestamp = get_current_timestamp()
         
-        log_msg = f"Prediction for RNTI {rnti}: {final_prediction} at {timestamp}, "
+        log_msg = f"Prediction for RNTI 0x{rnti:x}: {final_prediction} at {timestamp}, "
         
         if model_prediction is not None:
             log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
@@ -344,11 +344,11 @@ class MetricsProcessor:
         
         self.logger.log(log_msg)
     
-    def get_ue_metrics_summary(self, rnti: str) -> Dict[str, any]:
+    def get_ue_metrics_summary(self, rnti: int) -> Dict[str, Any]:
         """Get a summary of metrics for a specific UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             Dictionary with UE metrics summary.

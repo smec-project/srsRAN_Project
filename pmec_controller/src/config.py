@@ -56,7 +56,6 @@ class EventTypes:
 # Network constants
 class NetworkConstants:
     """Constants for network operations."""
-    RNTI_STRING_LENGTH = 4
     SLOT_MAX = 20480
     RECV_BUFFER_SIZE = 1024
     SOCKET_LISTEN_BACKLOG = 5
@@ -65,12 +64,10 @@ class NetworkConstants:
 # Message types
 class MessageTypes:
     """Constants for message types."""
-    NEW_UE = "NEW_UE"
-    
-    # RAN metrics types
-    PRB = "PRB"
-    SR = "SR"  
-    BSR = "BSR"
+    SLO_MESSAGE = 0
+
+
+
 
 
 # Default file paths

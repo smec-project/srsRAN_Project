@@ -2,7 +2,7 @@
 
 import threading
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
 from .config import ControllerConfig, DefaultPaths
 from .utils import Logger
@@ -205,11 +205,11 @@ class PmecController:
         
         return status
     
-    def get_ue_status(self, rnti: str) -> Optional[Dict[str, any]]:
+    def get_ue_status(self, rnti: int) -> Optional[Dict[str, Any]]:
         """Get detailed status for a specific UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             Dictionary with UE status or None if UE not found.
@@ -230,34 +230,34 @@ class PmecController:
         
         return status
     
-    def list_registered_ues(self) -> list[str]:
+    def list_registered_ues(self) -> List[int]:
         """Get list of all registered UE RNTIs.
         
         Returns:
-            List of RNTI strings.
+            List of RNTI integers.
         """
         return list(self.priority_manager.ue_info.keys())
     
-    def print_window_data(self, rnti: str) -> None:
+    def print_window_data(self, rnti: int) -> None:
         """Print window data for debugging purposes.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
         """
         self.event_processor.print_window_data(rnti)
     
-    def force_priority_update(self, rnti: str, priority: float) -> bool:
+    def force_priority_update(self, rnti: int, priority: float) -> bool:
         """Force a priority update for a specific UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             priority: Priority value to set.
             
         Returns:
             True if update was successful.
         """
         if rnti not in self.priority_manager.ue_info:
-            self.logger.log(f"Cannot update priority for unknown RNTI {rnti}")
+            self.logger.log(f"Cannot update priority for unknown RNTI 0x{rnti:x}")
             return False
         
         if priority > 0:
@@ -267,15 +267,15 @@ class PmecController:
         
         if success:
             self.priority_manager.update_priority(rnti, priority)
-            self.logger.log(f"Forced priority update for RNTI {rnti}: {priority}")
+            self.logger.log(f"Forced priority update for RNTI 0x{rnti:x}: {priority}")
         
         return success
     
-    def cleanup_ue(self, rnti: str) -> bool:
+    def cleanup_ue(self, rnti: int) -> bool:
         """Clean up all data for a specific UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             True if cleanup was successful.
@@ -303,5 +303,5 @@ class PmecController:
         if rnti in self.metrics_processor.ue_peak_buffer_size:
             del self.metrics_processor.ue_peak_buffer_size[rnti]
         
-        self.logger.log(f"Cleaned up all data for RNTI {rnti}")
+        self.logger.log(f"Cleaned up all data for RNTI 0x{rnti:x}")
         return True 

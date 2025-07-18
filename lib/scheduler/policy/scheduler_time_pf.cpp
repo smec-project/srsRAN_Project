@@ -686,13 +686,11 @@ bool scheduler_time_pf::ue_ul_prio_compare::operator()(const scheduler_time_pf::
 
 void scheduler_time_pf::handle_priority_messages()
 {
-#pragma pack(push, 1)
   struct priority_message {
-    char    rnti[5]; // 4 chars for RNTI + null terminator
-    double  priority;
-    uint8_t is_reset;
-  };
-#pragma pack(pop)
+    uint32_t rnti; // RNTI as 32-bit unsigned integer
+    double   priority;
+    uint8_t  is_reset;
+  } __attribute__((packed));
 
   struct sockaddr_in client_addr;
   socklen_t          len = sizeof(client_addr);
@@ -713,9 +711,8 @@ void scheduler_time_pf::handle_priority_messages()
         break;
       }
 
-      // Convert RNTI string to unsigned
-      std::string rnti_str(msg.rnti);
-      unsigned    rnti_val = std::stoul(rnti_str, nullptr, 16);
+      // Use RNTI directly as unsigned integer
+      unsigned rnti_val = msg.rnti;
 
       {
         std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);

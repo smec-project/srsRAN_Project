@@ -24,15 +24,15 @@ class EventProcessor:
         self.window_size = window_size
         self.logger = logger
         
-        # Store events for each RNTI
-        self.window_events: Dict[str, List[np.ndarray]] = {}
+        # Store events for each RNTI - using int RNTI as keys
+        self.window_events: Dict[int, List[np.ndarray]] = {}
         
         # Slot cycle tracking for each UE and event type
-        self.ue_slot_cycles_prb: Dict[str, int] = {}
-        self.ue_slot_cycles_ctrl: Dict[str, int] = {}
+        self.ue_slot_cycles_prb: Dict[int, int] = {}
+        self.ue_slot_cycles_ctrl: Dict[int, int] = {}
         
         # Base times for relative timestamp calculation
-        self.ue_base_times: Dict[str, float] = {}
+        self.ue_base_times: Dict[int, float] = {}
         
         # Global base slot for normalization
         self.global_base_slot: Optional[int] = None
@@ -40,11 +40,11 @@ class EventProcessor:
         # Track maximum PRB slot globally
         self.gnb_max_prb_slot: int = 0
     
-    def normalize_slot(self, rnti: str, slot: int, event_type: str) -> int:
+    def normalize_slot(self, rnti: int, slot: int, event_type: str) -> int:
         """Convert cyclic slots (0-20480) into a continuous increasing sequence.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             slot: Current slot number (0-20480).
             event_type: Type of event ("PRB", "SR", "BSR").
             
@@ -94,7 +94,7 @@ class EventProcessor:
     
     def add_event(
         self, 
-        rnti: str, 
+        rnti: int, 
         event_type: str, 
         timestamp: float, 
         slot: int, 
@@ -103,7 +103,7 @@ class EventProcessor:
         """Add an event to the window for a specific UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             event_type: Type of event ("PRB", "SR", "BSR").
             timestamp: Timestamp when the event occurred.
             slot: Slot number when the event occurred.
@@ -141,11 +141,11 @@ class EventProcessor:
                 break
         self.window_events[rnti].insert(insert_idx, event)
     
-    def get_bsr_indices(self, rnti: str) -> List[int]:
+    def get_bsr_indices(self, rnti: int) -> List[int]:
         """Get indices of all BSR events for a specific UE.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             List of indices where BSR events occur.
@@ -158,11 +158,11 @@ class EventProcessor:
             if e[0] == EventTypes.BSR
         ]
     
-    def trim_window(self, rnti: str) -> bool:
+    def trim_window(self, rnti: int) -> bool:
         """Trim the sliding window to maintain the specified size.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             True if window was trimmed and is ready for analysis.
@@ -177,11 +177,11 @@ class EventProcessor:
         
         return False
     
-    def extract_window_features(self, rnti: str) -> Optional[np.ndarray]:
+    def extract_window_features(self, rnti: int) -> Optional[np.ndarray]:
         """Extract features for machine learning inference.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
             
         Returns:
             Feature array for ML model or None if insufficient data.
@@ -265,16 +265,16 @@ class EventProcessor:
 
         return np.concatenate(all_features)
     
-    def print_window_data(self, rnti: str) -> None:
+    def print_window_data(self, rnti: int) -> None:
         """Print all events in the current window for debugging.
         
         Args:
-            rnti: Radio Network Temporary Identifier.
+            rnti: Radio Network Temporary Identifier as integer.
         """
         if not self.window_events.get(rnti):
             return
 
-        print(f"\nWindow data for RNTI {rnti}:")
+        print(f"\nWindow data for RNTI 0x{rnti:x}:")
         print("Type | Timestamp(ms) | BSR bytes | PRBs | Slot | Label")
         print("-" * 60)
 
