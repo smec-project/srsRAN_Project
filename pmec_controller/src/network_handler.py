@@ -231,15 +231,15 @@ class NetworkHandler:
             msg_parts: Message parts split by '|'.
             app_id: Application identifier.
         """
-        if len(msg_parts) != 5:
+        if len(msg_parts) != 3:
             self.logger.log(f"Invalid NEW_UE message format: {msg_parts}")
             return
         
-        _, rnti, ue_idx, latency_req, request_size = msg_parts
+        _, rnti, slo_latency = msg_parts
         
         self.priority_manager.register_ue(
-            rnti, app_id, ue_idx, 
-            float(latency_req), int(request_size)
+            rnti, app_id, 
+            float(slo_latency)
         )
 
     

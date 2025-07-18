@@ -270,7 +270,7 @@ class MetricsProcessor:
             return
         
         # Calculate initial remaining time
-        remaining_time = self.priority_manager.ue_info[rnti]["latency_req"]
+        remaining_time = self.priority_manager.ue_info[rnti]["slo_latency"]
         
         # Look for PRB event at the same slot as latest BSR
         events = self.event_processor.window_events[rnti]

@@ -53,24 +53,18 @@ class PriorityManager:
         self, 
         rnti: str, 
         app_id: str, 
-        ue_idx: str, 
-        latency_req: float, 
-        request_size: int
+        slo_latency: float
     ) -> None:
         """Register a new UE with its requirements.
         
         Args:
             rnti: Radio Network Temporary Identifier.
             app_id: Application identifier.
-            ue_idx: UE index.
-            latency_req: Latency requirement in milliseconds.
-            request_size: Request size in bytes.
+            slo_latency: SLO latency requirement in milliseconds.
         """
         self.ue_info[rnti] = {
             "app_id": app_id,
-            "ue_idx": ue_idx,
-            "latency_req": latency_req,
-            "request_size": request_size,
+            "slo_latency": slo_latency,
         }
         
         # Initialize tracking structures
@@ -85,7 +79,7 @@ class PriorityManager:
         
         self.logger.log(
             f"Registered UE - RNTI: {rnti}, App: {app_id}, "
-            f"Latency Req: {latency_req}ms, Size: {request_size} bytes"
+            f"SLO Latency: {slo_latency}ms"
         )
     
     def update_bsr_state(self, rnti: str, bsr_bytes: int) -> None:
