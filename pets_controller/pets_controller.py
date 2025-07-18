@@ -873,19 +873,19 @@ def main():
     parser.add_argument(
         "--model-path",
         type=str,
-        default="labeled_data/models/bsr_only_xgboost.joblib",
+        default="decision_tree/models/bsr_only_xgboost.joblib",
         help=(
             "Path to the trained model for inference (default:"
-            " labeled_data/bsr_only_xgboost.joblib)"
+            " decision_tree/models/bsr_only_xgboost.joblib)"
         ),
     )
     parser.add_argument(
         "--scaler-path",
         type=str,
-        default="labeled_data/models/bsr_only_scaler.joblib",
+        default="decision_tree/models/bsr_only_scaler.joblib",
         help=(
             "Path to the scaler for the model (default:"
-            " labeled_data/bsr_only_scaler.joblib)"
+            " decision_tree/models/bsr_only_scaler.joblib)"
         ),
     )
     args = parser.parse_args()
