@@ -6,7 +6,3 @@ preview = true
 enable-unstable-feature = [
     "string_processing"
 ]
-
-[tool.docformatter]
-wrap-summaries = 80
-wrap-descriptions = 80

@@ -341,9 +341,7 @@ def train_and_evaluate(
         print("\nFeature Importance Ranking:")
         importances = model.feature_importances_
         importance_pairs = list(zip(feature_names, importances))
-        importance_pairs.sort(
-            key=lambda x: x[1], reverse=True
-        )  # 按重要性降序排序
+        importance_pairs.sort(key=lambda x: x[1], reverse=True)
         for name, importance in importance_pairs:
             print(f"{name}: {importance:.4f}")
 
@@ -559,9 +557,7 @@ def auto_train_and_evaluate(
         print("\nFeature Importance Ranking:")
         importances = model.feature_importances_
         importance_pairs = list(zip(feature_names, importances))
-        importance_pairs.sort(
-            key=lambda x: x[1], reverse=True
-        )  # 按重要性降序排序
+        importance_pairs.sort(key=lambda x: x[1], reverse=True)
         for name, importance in importance_pairs:
             print(f"{name}: {importance:.4f}")
 
