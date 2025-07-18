@@ -6,7 +6,7 @@ import math
 from typing import Dict, Optional
 
 
-class TuttiController:
+class TrainDataCollector:
     def __init__(
         self,
         app_port: int = 5557,  # Port to receive application messages
@@ -685,7 +685,7 @@ class TuttiController:
 
 
 def main():
-    controller = TuttiController()
+    controller = TrainDataCollector()
     if controller.start():
         try:
             while True:

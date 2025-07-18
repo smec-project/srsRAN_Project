@@ -44,7 +44,7 @@ cell_cfg:
   #   nof_ul_symbols: 4 
 
 log:
-  filename: /tmp/gnb.log
+  filename: stdout
   all_level: info
 
 pcap:
