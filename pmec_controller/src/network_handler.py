@@ -80,10 +80,10 @@ class NetworkHandler:
             self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            self.app_socket.bind(("0.0.0.0", self.config.app_port))
+            self.app_socket.bind(("0.0.0.0", self.config.slo_ctrl_port))
             self.app_socket.listen(NetworkConstants.SOCKET_LISTEN_BACKLOG)
             
-            self.logger.log(f"Application server listening on port {self.config.app_port}")
+            self.logger.log(f"SLO control plane server listening on port {self.config.slo_ctrl_port}")
             return True
             
         except Exception as e:

@@ -9,7 +9,7 @@ class ControllerConfig:
     """Configuration settings for the PMEC Controller.
     
     Attributes:
-        app_port: Port to receive application messages.
+        slo_ctrl_port: Port to receive SLO control plane messages from users.
         ran_metrics_ip: IP address for RAN metrics connection.
         ran_metrics_port: Port for RAN metrics connection.
         ran_control_ip: IP address for RAN control connection.
@@ -22,7 +22,7 @@ class ControllerConfig:
         priority_update_interval: Interval for priority updates in seconds.
         slot_duration_ms: Duration of each slot in milliseconds.
     """
-    app_port: int = 5557
+    slo_ctrl_port: int = 5557
     ran_metrics_ip: str = "127.0.0.1"
     ran_metrics_port: int = 5556
     ran_control_ip: str = "127.0.0.1"
