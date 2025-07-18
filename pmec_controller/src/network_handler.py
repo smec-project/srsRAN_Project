@@ -11,9 +11,9 @@ from .priority_manager import PriorityManager
 
 
 class NetworkHandler:
-    """Handles network communications for application and RAN connections.
+    """Handles network communications for SLO control plane and RAN connections.
     
-    Manages application server connections, RAN metrics reception,
+    Manages SLO control plane server connections, RAN metrics reception,
     and RAN control commands for priority updates.
     """
     
@@ -37,8 +37,8 @@ class NetworkHandler:
         # Running state
         self.running = False
         
-        # Application server setup
-        self.app_socket: Optional[socket.socket] = None
+        # SLO control plane server setup
+        self.slo_ctrl_socket: Optional[socket.socket] = None
         
         # RAN connections
         self.ran_metrics_socket: Optional[socket.socket] = None
@@ -54,8 +54,8 @@ class NetworkHandler:
             True if all connections were set up successfully.
         """
         try:
-            # Setup application server
-            if not self._setup_app_server():
+            # Setup SLO control plane server
+            if not self._setup_slo_ctrl_server():
                 return False
             
             # Setup RAN connections
@@ -69,24 +69,24 @@ class NetworkHandler:
             self.logger.log(f"Error setting up network connections: {e}")
             return False
     
-    def _setup_app_server(self) -> bool:
-        """Set up the application server socket.
+    def _setup_slo_ctrl_server(self) -> bool:
+        """Set up the SLO control plane server socket.
         
         Returns:
             True if setup was successful.
         """
         try:
-            self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            self.app_socket.bind(("0.0.0.0", self.config.slo_ctrl_port))
-            self.app_socket.listen(NetworkConstants.SOCKET_LISTEN_BACKLOG)
+            self.slo_ctrl_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.slo_ctrl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.slo_ctrl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            self.slo_ctrl_socket.bind(("0.0.0.0", self.config.slo_ctrl_port))
+            self.slo_ctrl_socket.listen(NetworkConstants.SOCKET_LISTEN_BACKLOG)
             
             self.logger.log(f"SLO control plane server listening on port {self.config.slo_ctrl_port}")
             return True
             
         except Exception as e:
-            self.logger.log(f"Error setting up application server: {e}")
+            self.logger.log(f"Error setting up SLO control plane server: {e}")
             return False
     
     def _setup_ran_connections(self) -> bool:
@@ -134,7 +134,7 @@ class NetworkHandler:
         self.running = True
         
         # Start networking threads
-        threading.Thread(target=self._handle_app_connections, daemon=True).start()
+        threading.Thread(target=self._handle_slo_ctrl_connections, daemon=True).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
         
         self.logger.log("Network handling threads started")
@@ -148,32 +148,32 @@ class NetworkHandler:
         """
         self.metrics_callback = callback
     
-    def _handle_app_connections(self) -> None:
-        """Handle incoming application connections."""
-        while self.running and self.app_socket:
+    def _handle_slo_ctrl_connections(self) -> None:
+        """Handle incoming SLO control plane connections."""
+        while self.running and self.slo_ctrl_socket:
             try:
-                conn, addr = self.app_socket.accept()
-                self.logger.log(f"New application connected from {addr}")
+                conn, addr = self.slo_ctrl_socket.accept()
+                self.logger.log(f"New SLO control plane connection from {addr}")
                 
                 threading.Thread(
-                    target=self._handle_app_messages,
+                    target=self._handle_slo_ctrl_messages,
                     args=(conn, addr),
                     daemon=True,
                 ).start()
                 
             except Exception as e:
                 if self.running:  # Only log if we're still supposed to be running
-                    self.logger.log(f"Error accepting application connection: {e}")
+                    self.logger.log(f"Error accepting SLO control plane connection: {e}")
     
-    def _handle_app_messages(self, conn: socket.socket, addr) -> None:
-        """Handle messages from a specific application connection.
+    def _handle_slo_ctrl_messages(self, conn: socket.socket, addr) -> None:
+        """Handle messages from a specific SLO control plane connection.
         
         Args:
-            conn: Socket connection to the application.
-            addr: Address of the application.
+            conn: Socket connection to the SLO control plane.
+            addr: Address of the SLO control plane client.
         """
         try:
-            self.logger.log(f"Application connected from {addr}")
+            self.logger.log(f"SLO control plane client connected from {addr}")
 
             while self.running:
                 try:
@@ -182,19 +182,19 @@ class NetworkHandler:
                         break
 
                     message = data.decode("utf-8").strip()
-                    self._process_app_message(message)
+                    self._process_slo_ctrl_message(message)
 
                 except Exception as e:
-                    self.logger.log(f"Error processing application message: {e}")
+                    self.logger.log(f"Error processing SLO control plane message: {e}")
                     break
 
         except Exception as e:
-            self.logger.log(f"Error in application message handler: {e}")
+            self.logger.log(f"Error in SLO control plane message handler: {e}")
         finally:
             conn.close()
     
-    def _process_app_message(self, message: str) -> None:
-        """Process a message from an application.
+    def _process_slo_ctrl_message(self, message: str) -> None:
+        """Process a message from SLO control plane.
         
         Args:
             message: The message string to process.
@@ -209,10 +209,10 @@ class NetworkHandler:
                 self.logger.log(f"Unknown message type: {msg_type}")
                 
         except Exception as e:
-            self.logger.log(f"Error processing app message '{message}': {e}")
+            self.logger.log(f"Error processing SLO control plane message '{message}': {e}")
     
     def _handle_new_ue_message(self, msg_parts: list) -> None:
-        """Handle NEW_UE message from application.
+        """Handle NEW_UE message from SLO control plane.
         
         Args:
             msg_parts: Message parts split by '|'.
@@ -302,12 +302,12 @@ class NetworkHandler:
         """Stop all networking operations and clean up connections."""
         self.running = False
 
-        # Close all application connections
-        # The app_connections dictionary is removed, so this loop is no longer needed.
+        # Close all SLO control plane connections
+        # The slo_ctrl_connections dictionary is removed, so this loop is no longer needed.
 
         # Close server sockets
         sockets_to_close = [
-            self.app_socket,
+            self.slo_ctrl_socket,
             self.ran_metrics_socket,
             self.ran_control_socket
         ]
@@ -330,8 +330,8 @@ class NetworkHandler:
         """
         return {
             "running": self.running,
-            "app_server_active": self.app_socket is not None,
+            "slo_ctrl_server_active": self.slo_ctrl_socket is not None,
             "ran_metrics_connected": self.ran_metrics_socket is not None,
             "ran_control_connected": self.ran_control_socket is not None,
-            "active_app_connections": 0 # No longer tracking active app connections
+            "active_slo_ctrl_connections": 0 # No longer tracking active SLO control plane connections
         } 

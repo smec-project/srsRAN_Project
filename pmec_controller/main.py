@@ -40,10 +40,10 @@ def main():
         ),
     )
     parser.add_argument(
-        "--app-port",
+        "--slo-ctrl-port",
         type=int,
         default=5557,
-        help="Port to receive application messages (default: 5557)",
+        help="Port to receive SLO control plane messages from users (default: 5557)",
     )
     parser.add_argument(
         "--ran-metrics-ip",
@@ -74,7 +74,7 @@ def main():
 
     # Create configuration from command line arguments
     config = ControllerConfig(
-        app_port=args.app_port,
+        slo_ctrl_port=args.slo_ctrl_port,
         ran_metrics_ip=args.ran_metrics_ip,
         ran_metrics_port=args.ran_metrics_port,
         ran_control_ip=args.ran_control_ip,
