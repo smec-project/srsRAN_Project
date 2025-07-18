@@ -3,11 +3,10 @@
 import socket
 import struct
 import threading
-import time
 from typing import Dict, Optional, Callable
 
 from .config import ControllerConfig, MessageTypes, NetworkConstants
-from .utils import Logger, format_rnti_string, get_current_timestamp
+from .utils import Logger, format_rnti_string
 from .priority_manager import PriorityManager
 
 

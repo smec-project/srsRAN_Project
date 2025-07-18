@@ -1,11 +1,10 @@
 """Event processing and windowing functionality for PMEC Controller."""
 
 import numpy as np
-from typing import Dict, List, Optional, Tuple
-from collections import deque
+from typing import Dict, List, Optional
 
 from .config import EventTypes, NetworkConstants
-from .utils import Logger, get_current_timestamp
+from .utils import Logger
 
 
 class EventProcessor:

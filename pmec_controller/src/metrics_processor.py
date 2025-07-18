@@ -1,6 +1,6 @@
 """RAN metrics processing functionality for PMEC Controller."""
 
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional
 from collections import deque
 
 from .config import MessageTypes, EventTypes

@@ -1,8 +1,6 @@
 """Priority management functionality for PMEC Controller."""
 
-import time
-from typing import Dict, List, Tuple, Optional
-from collections import deque
+from typing import Dict, List, Tuple
 
 from .config import ControllerConfig
 from .utils import Logger, get_current_timestamp, safe_divide
