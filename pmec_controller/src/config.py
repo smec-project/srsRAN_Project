@@ -67,9 +67,6 @@ class MessageTypes:
     SLO_MESSAGE = 0
 
 
-
-
-
 # Default file paths
 class DefaultPaths:
     """Default file paths for model and data files."""
