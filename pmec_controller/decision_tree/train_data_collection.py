@@ -5,24 +5,30 @@ import time
 import math
 from typing import Dict, Optional
 
+# Import message types from main controller
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+from config import MessageTypes
+
 
 class TrainDataCollector:
     def __init__(
         self,
-        app_port: int = 5557,  # Port to receive application messages
+        slo_ctrl_port: int = 5557,  # Port to receive SLO control plane messages
         ran_metrics_ip: str = "127.0.0.1",
         ran_metrics_port: int = 5556,  # Port to receive RAN metrics
         ran_control_ip: str = "127.0.0.1",
         ran_control_port: int = 5555,  # Port to send priority updates
     ):
-        # Application server setup
-        self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # SLO control plane server setup
+        self.slo_ctrl_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Enable address/port reuse
-        self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        self.app_socket.bind(("0.0.0.0", app_port))
-        self.app_socket.listen(5)
-        self.app_connections: Dict[str, socket.socket] = {}
+        self.slo_ctrl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.slo_ctrl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        self.slo_ctrl_socket.bind(("0.0.0.0", slo_ctrl_port))
+        self.slo_ctrl_socket.listen(5)
+        self.slo_ctrl_connections: Dict[str, socket.socket] = {}
 
         # RAN metrics connection setup
         self.ran_metrics_socket = socket.socket(
@@ -52,58 +58,47 @@ class TrainDataCollector:
 
         # State tracking
         self.running = False
-        self.current_metrics: Dict[str, dict] = {}  # RNTI (str) -> metrics
-        self.ue_info: Dict[str, dict] = (
+        self.current_metrics: Dict[int, dict] = {}  # RNTI (int) -> metrics
+        self.ue_info: Dict[int, dict] = (
             {}
-        )  # RNTI (str) -> {app_id, latency_req, request_size, ue_idx}
-        self.request_sequences: Dict[str, list] = (
+        )  # RNTI (int) -> {slo_latency}
+        self.request_sequences: Dict[int, list] = (
             {}
-        )  # RNTI (str) -> list of sequence numbers
-        self.app_requirements: Dict[str, Dict[str, dict]] = (
-            {}
-        )  # UE_IDX -> {app_id -> requirements}
+        )  # RNTI (int) -> list of sequence numbers
 
         # Track resource requirements and pending requests for each UE
-        self.ue_resource_needs: Dict[str, int] = (
+        self.ue_resource_needs: Dict[int, int] = (
             {}
         )  # RNTI -> total bytes needed
-        self.ue_pending_requests: Dict[str, Dict[int, int]] = (
+        self.ue_pending_requests: Dict[int, Dict[int, int]] = (
             {}
         )  # RNTI -> {request_id -> bytes}
 
         # Track latest PRB allocation and slot for each UE
-        self.ue_prb_status: Dict[str, tuple] = {}  # RNTI -> (slot, prbs)
+        self.ue_prb_status: Dict[int, tuple] = {}  # RNTI -> (slot, prbs)
 
         # Change request_timers to store start timestamps
-        self.request_start_times: Dict[str, Dict[int, float]] = (
+        self.request_start_times: Dict[int, Dict[int, float]] = (
             {}
         )  # RNTI -> {request_id -> start_timestamp}
 
         # Track UE priority states
-        self.ue_priorities: Dict[str, float] = {}  # RNTI -> current_priority
+        self.ue_priorities: Dict[int, float] = {}  # RNTI -> current_priority
 
         # Track PRB allocation history
         self.HISTORY_WINDOW = 100  # Keep last 100 slot records
-        self.prb_history: Dict[str, Dict[int, int]] = (
+        self.prb_history: Dict[int, Dict[int, int]] = (
             {}
         )  # RNTI -> {slot -> prbs}
         self.slot_history: list = []  # Ordered list of slots we've seen
 
         # Track allocated PRBs for each request
-        self.request_prb_allocations: Dict[str, Dict[int, int]] = (
+        self.request_prb_allocations: Dict[int, Dict[int, int]] = (
             {}
         )  # RNTI -> {request_id -> total_allocated_prbs}
 
         # Open log file first
         self.log_file = open("controller.txt", "w")
-
-        # Then start priority update thread
-        # self.priority_thread = threading.Thread(target=self._update_priorities)
-        # self.priority_thread.start()
-
-        # Add mapping between UE_IDX and RNTI
-        self.ue_idx_to_rnti = {}  # UE_IDX -> RNTI
-        self.rnti_to_ue_idx = {}  # RNTI -> UE_IDX
 
     def start(self):
         """
@@ -124,172 +119,99 @@ class TrainDataCollector:
 
         # Start threads for different functionalities
         threading.Thread(
-            target=self._handle_app_connections, daemon=True
+            target=self._handle_slo_ctrl_connections, daemon=True
         ).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
 
         return True
 
-    def _handle_app_connections(self):
+    def _handle_slo_ctrl_connections(self):
         """
-        Handle incoming application connections and messages.
+        Handle incoming SLO control plane connections and messages.
         """
         while self.running:
             try:
-                conn, addr = self.app_socket.accept()
-                self.log_file.write(f"New application connected from {addr}\n")
+                conn, addr = self.slo_ctrl_socket.accept()
+                self.log_file.write(f"New SLO control plane connected from {addr}\n")
                 self.log_file.flush()
-                self.app_connections[addr[0]] = conn
+                self.slo_ctrl_connections[addr[0]] = conn
                 threading.Thread(
-                    target=self._handle_app_messages,
+                    target=self._handle_slo_ctrl_messages,
                     args=(conn, addr),
                     daemon=True,
                 ).start()
             except Exception as e:
                 self.log_file.write(
-                    f"Error accepting application connection: {e}\n"
+                    f"Error accepting SLO control plane connection: {e}\n"
                 )
                 self.log_file.flush()
 
-    def _handle_app_messages(self, conn: socket.socket, addr):
+    def _handle_slo_ctrl_messages(self, conn: socket.socket, addr):
         """
-        Handle messages from a specific application connection.
+        Handle binary messages from SLO control plane.
         """
         try:
-            # First message should be app registration with app_id
-            data = conn.recv(1024)
-            if not data:
-                return
-
-            app_id = data.decode("utf-8").strip()
-            self.app_connections[app_id] = conn
-            self.log_file.write(
-                f"Application {app_id} registered from {addr}\n"
-            )
-            self.log_file.flush()
-
+            self.log_file.write(f"SLO control plane client connected from {addr}\n")
+            
             while self.running:
                 try:
                     data = conn.recv(1024)
                     if not data:
                         break
 
-                    message = data.decode("utf-8").strip()
-                    msg_parts = message.split("|")
-                    msg_type = msg_parts[0]
-
-                    if msg_type == "NEW_UE":
-                        # Format: "NEW_UE|RNTI|UE_IDX|LATENCY_REQ|REQUEST_SIZE"
-                        _, rnti, ue_idx, latency_req, request_size = msg_parts
-                        # Store RNTI as string
-                        self.ue_info[rnti] = {
-                            "app_id": app_id,
-                            "ue_idx": ue_idx,
-                            "latency_req": float(latency_req),
-                            "request_size": int(request_size),
-                        }
-                        self.request_sequences[rnti] = []
-                        self.log_file.write(
-                            f"New UE registered - RNTI: {rnti}, UE_IDX:"
-                            f" {ue_idx}, Latency Req: {latency_req}ms, Size:"
-                            f" {request_size} bytes\n"
-                        )
-                        self.log_file.flush()
-                        # Initialize resource tracking for new UE
-                        self.ue_resource_needs[rnti] = 0
-                        self.ue_pending_requests[rnti] = {}
-                        self.request_start_times[rnti] = {}
-
-                    elif msg_type == "Start":
-                        # Format: "Start|rnti|seq_number"
-                        _, rnti, seq_num = msg_parts
-                        current_time = time.time()
-                        self.log_file.write(
-                            f"Request {seq_num} from RNTI {rnti} start at"
-                            f" {current_time}\n"
-                        )
-                        self.log_file.flush()
-
-                    elif msg_type == "REQUEST":
-                        # Format: "REQUEST|RNTI|SEQ_NUM"
-                        _, rnti, seq_num = msg_parts
-                        seq_num = int(seq_num)
-
-                        if rnti in self.ue_info:
-                            # Calculate request size in bytes
-                            request_size = self.ue_info[rnti]["request_size"]
-
-                            # Update resource needs and pending requests
-                            self.ue_resource_needs[rnti] += request_size
-                            self.ue_pending_requests[rnti][
-                                seq_num
-                            ] = request_size
-
-                            # Store request start time
-                            if rnti not in self.request_start_times:
-                                self.request_start_times[rnti] = {}
-                            self.request_start_times[rnti][
-                                seq_num
-                            ] = time.time()
-                        else:
-                            self.log_file.write(
-                                f"Warning: Request for unknown RNTI {rnti}\n"
-                            )
-                            self.log_file.flush()
-
-                    elif msg_type == "DONE":
-                        # Format: "DONE|RNTI|SEQ_NUM"
-                        _, rnti, seq_num = msg_parts
-                        seq_num = int(seq_num)
-
-                        # Calculate final processing time
-                        if (
-                            rnti in self.request_start_times
-                            and seq_num in self.request_start_times[rnti]
-                        ):
-                            start_time = self.request_start_times[rnti][seq_num]
-                            elapsed_time_ms = (
-                                time.time() - start_time
-                            ) * 1000  # Convert to ms
-                            self.log_file.write(
-                                f"Request {seq_num} from RNTI {rnti} completed"
-                                f" in {elapsed_time_ms:.2f}ms at"
-                                f" {time.time()}\n"
-                            )
-                            self.log_file.flush()
-                            del self.request_start_times[rnti][seq_num]
-
-                        # Handle resource tracking
-                        if (
-                            rnti in self.ue_pending_requests
-                            and seq_num in self.ue_pending_requests[rnti]
-                        ):
-                            completed_size = self.ue_pending_requests[rnti][
-                                seq_num
-                            ]
-                            self.ue_resource_needs[rnti] -= completed_size
-                            del self.ue_pending_requests[rnti][seq_num]
-
-                        if (
-                            rnti not in self.request_start_times
-                            and rnti not in self.ue_pending_requests
-                        ):
-                            self.log_file.write(
-                                f"Warning: Completion for unknown RNTI {rnti}\n"
-                            )
-                            self.log_file.flush()
+                    self._process_slo_ctrl_message(data)
 
                 except Exception as e:
-                    self.log_file.write(
-                        f"Error processing application message: {e}\n"
-                    )
+                    self.log_file.write(f"Error processing SLO control plane message: {e}\n")
                     self.log_file.flush()
                     break
 
         finally:
-            if app_id in self.app_connections:
-                del self.app_connections[app_id]
             conn.close()
+
+    def _process_slo_ctrl_message(self, data: bytes) -> None:
+        """Process a binary message from SLO control plane.
+        
+        Args:
+            data: The binary message data to process.
+        """
+        try:
+            # Expect 12 bytes: uint32 (message_type) + uint32 (rnti) + uint32 (slo_latency)
+            if len(data) != 12:
+                self.log_file.write(f"Invalid SLO control message size: {len(data)} bytes, expected 12\n")
+                self.log_file.flush()
+                return
+            
+            # Unpack: uint32 message_type, uint32 RNTI, uint32 SLO latency
+            msg_type, rnti, slo_latency_uint = struct.unpack('=III', data)
+            
+            if msg_type == MessageTypes.SLO_MESSAGE:
+                # Convert uint32 SLO latency to float
+                slo_latency_float = float(slo_latency_uint)
+                
+                # Store UE info with RNTI as integer
+                self.ue_info[rnti] = {
+                    "slo_latency": slo_latency_float,
+                }
+                self.request_sequences[rnti] = []
+                
+                self.log_file.write(
+                    f"New UE registered - RNTI: 0x{rnti:x}, SLO Latency: {slo_latency_float}ms\n"
+                )
+                self.log_file.flush()
+                
+                # Initialize resource tracking for new UE
+                self.ue_resource_needs[rnti] = 0
+                self.ue_pending_requests[rnti] = {}
+                self.request_start_times[rnti] = {}
+                
+            else:
+                self.log_file.write(f"Unknown message type: {msg_type}\n")
+                self.log_file.flush()
+            
+        except Exception as e:
+            self.log_file.write(f"Error processing SLO control plane binary message: {e}\n")
+            self.log_file.flush()
 
     def _handle_ran_metrics(self):
         """
@@ -297,35 +219,53 @@ class TrainDataCollector:
         """
         while self.running:
             try:
-                data = self.ran_metrics_socket.recv(1024).decode("utf-8")
+                data = self.ran_metrics_socket.recv(1024)
                 if not data:
                     continue
 
-                for line in data.strip().split("\n"):
-                    values = dict(item.split("=") for item in line.split(","))
-                    msg_type = values["TYPE"]
-
-                    if msg_type == "PRB":
-                        self._handle_prb_metrics(values)
-                    elif msg_type == "SR":
-                        self._handle_sr_metrics(values)
-                    elif msg_type == "BSR":
-                        self._handle_bsr_metrics(values)
+                self._process_ran_metrics_message(data)
 
             except Exception as e:
                 self.log_file.write(f"Error receiving RAN metrics: {e}\n")
                 self.log_file.flush()
 
-    def set_priority(self, rnti: str, priority: float):
+    def _process_ran_metrics_message(self, data: bytes) -> None:
+        """Process binary RAN metrics message.
+        
+        Args:
+            data: The binary message data to process.
+        """
+        try:
+            # Expect 16 bytes: uint32 (type) + uint32 (rnti) + uint32 (slot) + uint32 (value)
+            if len(data) != 16:
+                self.log_file.write(f"Invalid RAN metrics message size: {len(data)} bytes, expected 16\n")
+                self.log_file.flush()
+                return
+            
+            # Unpack: uint32 type, uint32 RNTI, uint32 slot, uint32 value
+            msg_type, rnti, slot, value = struct.unpack('=IIII', data)
+            
+            if msg_type == 0:  # PRB message
+                self._handle_prb_metrics(rnti, slot, value)
+            elif msg_type == 1:  # SR message
+                self._handle_sr_metrics(rnti, slot)
+            elif msg_type == 2:  # BSR message
+                self._handle_bsr_metrics(rnti, slot, value)
+            else:
+                self.log_file.write(f"Unknown RAN metrics type: {msg_type}\n")
+                self.log_file.flush()
+                
+        except Exception as e:
+            self.log_file.write(f"Error processing RAN metrics binary message: {e}\n")
+            self.log_file.flush()
+
+    def set_priority(self, rnti: int, priority: float):
         """
         Send priority update to RAN.
         """
         try:
-            # Format RNTI string and pack message in the correct format
-            rnti_str = f"{rnti:<4}".encode(
-                "ascii"
-            )  # Left align, space pad to 4 chars
-            msg = struct.pack("=5sdb", rnti_str, priority, False)
+            # Pack message with uint32 RNTI, float priority, bool reset
+            msg = struct.pack("=Ifb", rnti, priority, False)
 
             self.ran_control_socket.send(msg)
             return True
@@ -334,7 +274,7 @@ class TrainDataCollector:
             self.log_file.flush()
             return False
 
-    def reset_priority(self, rnti: str):
+    def reset_priority(self, rnti: int):
         """
         Reset priority for a specific RNTI.
         """
@@ -344,8 +284,7 @@ class TrainDataCollector:
                 self.ue_priorities[rnti] = 0.0
 
             # Reset in scheduler
-            rnti_str = f"{rnti:<4}".encode("ascii")
-            msg = struct.pack("=5sdb", rnti_str, 0.0, True)
+            msg = struct.pack("=Ifb", rnti, 0.0, True)
             self.ran_control_socket.send(msg)
             return True
         except Exception as e:
@@ -359,8 +298,8 @@ class TrainDataCollector:
         """
         self.running = False
 
-        # Close all application connections
-        for conn in self.app_connections.values():
+        # Close all SLO control plane connections
+        for conn in self.slo_ctrl_connections.values():
             try:
                 conn.shutdown(socket.SHUT_RDWR)
                 conn.close()
@@ -369,8 +308,8 @@ class TrainDataCollector:
 
         # Close server sockets
         try:
-            self.app_socket.shutdown(socket.SHUT_RDWR)
-            self.app_socket.close()
+            self.slo_ctrl_socket.shutdown(socket.SHUT_RDWR)
+            self.slo_ctrl_socket.close()
         except:
             pass
 
@@ -386,13 +325,13 @@ class TrainDataCollector:
         except:
             pass
 
-    def _initialize_ue_priority(self, rnti: str):
+    def _initialize_ue_priority(self, rnti: int):
         """
         Initialize priority for a new UE.
         """
         self.ue_priorities[rnti] = 0.0
 
-    def _calculate_incentive_priority(self, ue_rnti: str) -> float:
+    def _calculate_incentive_priority(self, ue_rnti: int) -> float:
         """
         Calculate priority for incentive mode (first half of latency
         requirement)
@@ -415,8 +354,8 @@ class TrainDataCollector:
             )[0]
             request_size = self.ue_pending_requests[rnti][earliest_req_id]
             total_prbs = (request_size + BYTES_PER_PRB - 1) // BYTES_PER_PRB
-            latency_req = self.ue_info[rnti]["latency_req"]
-            available_ttis = latency_req / TTI_DURATION
+            slo_latency = self.ue_info[rnti]["slo_latency"]
+            available_ttis = slo_latency / TTI_DURATION
             prbs_per_tti = (total_prbs + int(available_ttis) - 1) // int(
                 available_ttis
             )
@@ -463,7 +402,7 @@ class TrainDataCollector:
         # self.log_file.flush()  # Ensure immediate write
         return current_offset
 
-    def _calculate_accelerate_priority(self, ue_rnti: str) -> float:
+    def _calculate_accelerate_priority(self, ue_rnti: int) -> float:
         """
         Calculate priority for accelerate mode (second half of latency
         requirement)
@@ -482,10 +421,10 @@ class TrainDataCollector:
         )[0]
         start_time = self.request_start_times[ue_rnti][earliest_req_id]
         elapsed_time_ms = (time.time() - start_time) * 1000
-        latency_req_ms = self.ue_info[ue_rnti]["latency_req"]
+        slo_latency_ms = self.ue_info[ue_rnti]["slo_latency"]
 
         # Calculate time to deadline in seconds
-        time_to_deadline_s = (latency_req_ms - elapsed_time_ms) * MS_TO_S
+        time_to_deadline_s = (slo_latency_ms - elapsed_time_ms) * MS_TO_S
 
         # Calculate remaining PRBs needed
         total_prbs_needed = (
@@ -538,8 +477,8 @@ class TrainDataCollector:
                         continue
 
                     # Get UE's latency requirement
-                    latency_req = self.ue_info[rnti]["latency_req"]
-                    incentive_threshold = latency_req / 2
+                    slo_latency = self.ue_info[rnti]["slo_latency"]
+                    incentive_threshold = slo_latency / 2
 
                     # Find earliest request and calculate its elapsed time
                     earliest_req_id = min(requests.items(), key=lambda x: x[1])[
@@ -552,7 +491,7 @@ class TrainDataCollector:
                     # Calculate priority based on current state
                     if elapsed_time_ms < incentive_threshold:
                         priority = self._calculate_incentive_priority(rnti)
-                    elif elapsed_time_ms < latency_req:
+                    elif elapsed_time_ms < slo_latency:
                         priority = self._calculate_accelerate_priority(rnti)
                     else:
                         priority = 10000
@@ -567,7 +506,7 @@ class TrainDataCollector:
                 self.log_file.write(f"Error updating priorities: {e}\n")
                 self.log_file.flush()
 
-    def _update_prb_history(self, rnti: str, slot: int, prbs: int):
+    def _update_prb_history(self, rnti: int, slot: int, prbs: int):
         """
         Update PRB history and track PRB allocations for earliest active
         request.
@@ -613,23 +552,12 @@ class TrainDataCollector:
                 self.request_prb_allocations[rnti][earliest_req_id] = 0
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
 
-    def _handle_prb_metrics(self, values):
+    def _handle_prb_metrics(self, rnti: int, slot: int, prbs: int):
         """
         Handle PRB allocation metrics.
         """
-        # Keep RNTI as string
-        rnti = values["RNTI"][-4:]  # Just take last 4 chars
-        ue_idx = values["UE_IDX"]
-        slot = int(values["SLOT"])
-        prbs = int(values["PRBs"])
-
-        # Update UE_IDX <-> RNTI mapping
-        self.ue_idx_to_rnti[ue_idx] = rnti
-        self.rnti_to_ue_idx[rnti] = ue_idx
-
         # Store basic metrics
         self.current_metrics[rnti] = {
-            "UE_IDX": ue_idx,
             "PRBs": prbs,
             "SLOT": slot,
         }
@@ -637,7 +565,7 @@ class TrainDataCollector:
         # Update latest PRB allocation and slot
         self.ue_prb_status[rnti] = (slot, prbs)
         self.log_file.write(
-            f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at"
+            f"PRB received from RNTI=0x{rnti:x}, slot={slot}, prbs={prbs} at"
             f" {time.time()}\n"
         )
         self.log_file.flush()
@@ -645,28 +573,21 @@ class TrainDataCollector:
         # Update PRB history
         self._update_prb_history(rnti, slot, prbs)
 
-    def _handle_sr_metrics(self, values):
+    def _handle_sr_metrics(self, rnti: int, slot: int):
         """
         Handle SR indication metrics.
         """
-        rnti = values["RNTI"][-4:]  # Just take last 4 chars
-        slot = int(values["SLOT"])
         self.log_file.write(
-            f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}\n"
+            f"SR received from RNTI=0x{rnti:x}, slot={slot} at {time.time()}\n"
         )
         self.log_file.flush()
 
-    def _handle_bsr_metrics(self, values):
+    def _handle_bsr_metrics(self, rnti: int, slot: int, bytes: int):
         """
         Handle BSR metrics.
         """
-        rnti = values["RNTI"][-4:]  # Just take last 4 chars
-        ue_idx = values["UE_IDX"]
-        bytes = int(values["BYTES"])
-        slot = int(values["SLOT"])
-
         self.log_file.write(
-            f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at"
+            f"BSR received from RNTI=0x{rnti:x}, slot={slot}, bytes={bytes} at"
             f" {time.time()}\n"
         )
         self.log_file.flush()
@@ -674,7 +595,7 @@ class TrainDataCollector:
         if rnti not in self.current_metrics:
             self.current_metrics[rnti] = {}
         self.current_metrics[rnti].update(
-            {"UE_IDX": ue_idx, "BSR_BYTES": bytes, "BSR_SLOT": slot}
+            {"BSR_BYTES": bytes, "BSR_SLOT": slot}
         )
 
     def __del__(self):
