@@ -21,7 +21,8 @@
  */
 
 #include "scheduler_metrics_sender.h"
-#include <fcntl.h> // For fcntl flags
+#include <arpa/inet.h> // For inet_addr
+#include <fcntl.h>     // For fcntl flags
 #include <iostream>
 #include <mutex>
 #include <netinet/in.h> // For sockaddr_in
@@ -31,7 +32,7 @@
 using namespace srsran;
 
 scheduler_metrics_sender::scheduler_metrics_sender() :
-  server_fd(-1), client_fd(-1), running(false), logger(srslog::fetch_basic_logger("SCHED"))
+  server_fd(-1), running(false), logger(srslog::fetch_basic_logger("SCHED"))
 {
 }
 
@@ -44,43 +45,17 @@ bool scheduler_metrics_sender::init(int port)
     return true;
   }
 
-  int opt   = 1;
-  server_fd = socket(AF_INET, SOCK_STREAM, 0);
+  server_fd = socket(AF_INET, SOCK_DGRAM, 0);
   if (server_fd < 0) {
     logger.error("Failed to create socket: {}", strerror(errno));
     return false;
   }
 
-  // Set both SO_REUSEADDR and SO_REUSEPORT to allow socket reuse
-  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
-    logger.error("Failed to set socket options: {}", strerror(errno));
-    close(server_fd);
-    return false;
-  }
-
-  struct sockaddr_in server_addr = {}; // Zero initialize
-  server_addr.sin_family         = AF_INET;
-  server_addr.sin_addr.s_addr    = INADDR_ANY;
-  server_addr.sin_port           = htons(port);
-
-  // Try binding with detailed error reporting
-  if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-    logger.error("Failed to bind to port {}: {} (errno={})", port, strerror(errno), errno);
-    close(server_fd);
-    return false;
-  }
-
-  if (listen(server_fd, 1) < 0) {
-    logger.error("Failed to listen on socket: {}", strerror(errno));
-    close(server_fd);
-    return false;
-  }
-
-  // Set non-blocking mode after successful bind
+  // Set non-blocking mode
   int flags = fcntl(server_fd, F_GETFL, 0);
   fcntl(server_fd, F_SETFL, flags | O_NONBLOCK);
 
-  logger.info("Metrics server successfully listening on port {}", port);
+  logger.info("Metrics UDP sender initialized (sending to port {})", port);
   running = true;
   return true;
 }
@@ -89,12 +64,6 @@ void scheduler_metrics_sender::stop()
 {
   std::lock_guard<std::mutex> lock(mutex);
   running = false;
-
-  // Close client socket if open
-  if (client_fd >= 0) {
-    close(client_fd);
-    client_fd = -1;
-  }
 
   // Close server socket if open
   if (server_fd >= 0) {
@@ -113,29 +82,18 @@ bool scheduler_metrics_sender::send_binary_message(const metrics_message& msg)
     }
   }
 
-  // Non-blocking check for new connections
-  if (client_fd < 0) {
-    struct sockaddr_in client_addr;
-    socklen_t          client_len = sizeof(client_addr);
-    int                new_client = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+  // UDP send to localhost (127.0.0.1)
+  struct sockaddr_in client_addr = {};
+  client_addr.sin_family         = AF_INET;
+  client_addr.sin_addr.s_addr    = inet_addr("127.0.0.1");
+  client_addr.sin_port           = htons(DEFAULT_METRICS_PORT);
 
-    if (new_client >= 0) {
-      // Set non-blocking for client socket
-      int flags = fcntl(new_client, F_GETFL, 0);
-      fcntl(new_client, F_SETFL, flags | O_NONBLOCK);
-      client_fd = new_client;
-    }
-    return false; // Skip sending if no client
-  }
-
-  // Non-blocking send binary data
-  ssize_t sent = send(client_fd, &msg, sizeof(msg), MSG_DONTWAIT | MSG_NOSIGNAL);
+  // Non-blocking send binary data via UDP
+  ssize_t sent = sendto(
+      server_fd, &msg, sizeof(msg), MSG_DONTWAIT | MSG_NOSIGNAL, (struct sockaddr*)&client_addr, sizeof(client_addr));
   if (sent < 0) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
-      // Just close client socket and wait for new connection
-      close(client_fd);
-      client_fd = -1;
-      // Don't reinit server socket, just wait for new client
+      logger.error("Failed to send metrics via UDP: {}", strerror(errno));
       return false;
     }
     return false;

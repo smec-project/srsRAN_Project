@@ -38,8 +38,8 @@ std::map<unsigned, double> scheduler_time_pf::ul_priorities;
 
 bool scheduler_time_pf::setup_server_socket()
 {
-  // Initialize socket
-  server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  // Initialize UDP socket
+  server_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
   if (server_sockfd < 0) {
     srslog::fetch_basic_logger("SCHED").error("Socket creation failed");
     return false;
@@ -65,13 +65,7 @@ bool scheduler_time_pf::setup_server_socket()
     return false;
   }
 
-  if (listen(server_sockfd, 1) < 0) {
-    srslog::fetch_basic_logger("SCHED").error("Listen failed");
-    close(server_sockfd);
-    return false;
-  }
-
-  std::cout << "Server socket setup complete, listening on port " << PRIORITY_PORT << std::endl;
+  std::cout << "UDP server socket setup complete, listening on port " << PRIORITY_PORT << std::endl;
   return true;
 }
 
@@ -93,9 +87,6 @@ scheduler_time_pf::~scheduler_time_pf()
   running = false;
   if (socket_thread.joinable()) {
     socket_thread.join();
-  }
-  if (client_sockfd > 0) {
-    close(client_sockfd);
   }
   close(server_sockfd);
 }
@@ -696,34 +687,33 @@ void scheduler_time_pf::handle_priority_messages()
   socklen_t          len = sizeof(client_addr);
 
   while (running) {
-    client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_addr, &len);
-    if (client_sockfd < 0) {
-      std::cout << "Accept failed, but keeping existing priorities" << std::endl;
+    priority_message msg;
+    ssize_t          n = recvfrom(server_sockfd, &msg, sizeof(msg), 0, (struct sockaddr*)&client_addr, &len);
+
+    if (n <= 0) {
+      if (running) {
+        std::cout << "UDP receive error, continuing..." << std::endl;
+      }
       continue;
     }
 
-    priority_message msg;
-    while (running) {
-      ssize_t n = recv(client_sockfd, &msg, sizeof(msg), 0);
-      if (n <= 0) {
-        std::cout << "Connection closed, but keeping existing priorities" << std::endl;
-        close(client_sockfd);
-        break;
-      }
+    if (n != sizeof(msg)) {
+      std::cout << "Received incomplete message, ignoring..." << std::endl;
+      continue;
+    }
 
-      // Use RNTI directly as unsigned integer
-      unsigned rnti_val = msg.rnti;
+    // Use RNTI directly as unsigned integer
+    unsigned rnti_val = msg.rnti;
 
-      {
-        std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
-        if (msg.is_reset) {
-          scheduler_time_pf::ul_priorities.erase(rnti_val);
-          // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
-        } else {
-          scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
-          // std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val
-          //          << std::dec << " to " << msg.priority << std::endl;
-        }
+    {
+      std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
+      if (msg.is_reset) {
+        scheduler_time_pf::ul_priorities.erase(rnti_val);
+        // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
+      } else {
+        scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
+        // std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val
+        //          << std::dec << " to " << msg.priority << std::endl;
       }
     }
   }

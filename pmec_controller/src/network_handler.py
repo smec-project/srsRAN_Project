@@ -95,26 +95,19 @@ class NetworkHandler:
             True if setup was successful.
         """
         try:
-            # RAN metrics connection
-            self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # RAN metrics connection (UDP)
+            self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            self.ran_metrics_socket.bind((self.config.ran_metrics_ip, self.config.ran_metrics_port))
             
-            # RAN control connection
-            self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # RAN control connection (UDP - changed from TCP)
+            self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             
-            # Connect to RAN services
-            self.ran_metrics_socket.connect(
-                (self.config.ran_metrics_ip, self.config.ran_metrics_port)
-            )
-            self.ran_control_socket.connect(
-                (self.config.ran_control_ip, self.config.ran_control_port)
-            )
-            
-            self.logger.log(f"Connected to RAN metrics at {self.config.ran_metrics_ip}:{self.config.ran_metrics_port}")
-            self.logger.log(f"Connected to RAN control at {self.config.ran_control_ip}:{self.config.ran_control_port}")
+            self.logger.log(f"RAN metrics UDP server listening on {self.config.ran_metrics_ip}:{self.config.ran_metrics_port}")
+            self.logger.log(f"RAN control UDP sender initialized (target: {self.config.ran_control_ip}:{self.config.ran_control_port})")
             return True
             
         except Exception as e:
@@ -202,10 +195,10 @@ class NetworkHandler:
 
     
     def _handle_ran_metrics(self) -> None:
-        """Receive and process binary RAN metrics."""
+        """Receive and process binary RAN metrics (UDP)."""
         while self.running and self.ran_metrics_socket:
             try:
-                data = self.ran_metrics_socket.recv(
+                data, addr = self.ran_metrics_socket.recvfrom(
                     NetworkConstants.RECV_BUFFER_SIZE
                 )
                 
@@ -221,7 +214,7 @@ class NetworkHandler:
                     self.logger.log(f"Error receiving RAN metrics: {e}")
     
     def send_priority_update(self, rnti: int, priority: float, reset: bool = False) -> bool:
-        """Send priority update to RAN.
+        """Send priority update to RAN via UDP.
         
         Args:
             rnti: Radio Network Temporary Identifier as integer.
@@ -239,7 +232,11 @@ class NetworkHandler:
             # Pack message with RNTI as integer
             msg = struct.pack("=IdB", rnti, priority, reset)
 
-            self.ran_control_socket.send(msg)
+            # Send via UDP to target address
+            self.ran_control_socket.sendto(
+                msg, 
+                (self.config.ran_control_ip, self.config.ran_control_port)
+            )
             return True
             
         except Exception as e:
@@ -304,5 +301,7 @@ class NetworkHandler:
             "slo_ctrl_server_active": self.slo_ctrl_socket is not None,
             "ran_metrics_connected": self.ran_metrics_socket is not None,
             "ran_control_connected": self.ran_control_socket is not None,
-            "active_slo_ctrl_connections": "N/A (UDP)"  # UDP doesn't maintain connections
+            "active_slo_ctrl_connections": "N/A (UDP)",  # UDP doesn't maintain connections
+            "ran_metrics_protocol": "UDP",
+            "ran_control_protocol": "UDP"
         } 

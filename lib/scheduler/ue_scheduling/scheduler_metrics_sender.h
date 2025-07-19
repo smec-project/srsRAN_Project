@@ -71,7 +71,7 @@ struct bsr_metrics : public base_metrics {
   slot_point slot_rx;
 };
 
-/// \brief Class responsible for sending scheduler metrics over TCP connection.
+/// \brief Class responsible for sending scheduler metrics via UDP.
 ///
 /// Sends metrics in binary format as 4 32-bit integers:
 /// - PRB: [type=0][rnti][prbs][slot]
@@ -107,15 +107,15 @@ private:
 public:
   ~scheduler_metrics_sender() { stop(); }
 
-  /// \brief Initialize the TCP server.
-  /// \param[in] port TCP port to listen on.
+  /// \brief Initialize the UDP sender.
+  /// \param[in] port Target UDP port to send metrics to.
   /// \return True on success, false otherwise.
   bool init(int port = DEFAULT_METRICS_PORT);
 
-  /// \brief Stop the TCP server and cleanup resources.
+  /// \brief Stop the UDP sender and cleanup resources.
   void stop();
 
-  /// \brief Send binary message to connected client.
+  /// \brief Send binary message via UDP.
   /// \param[in] msg Binary message to send.
   /// \return True if message was sent successfully, false otherwise.
   bool send_binary_message(const metrics_message& msg);
@@ -132,14 +132,9 @@ private:
   metrics_message create_sr_message(const sr_metrics& metrics);
   metrics_message create_bsr_message(const bsr_metrics& metrics);
 
-  /// \brief Thread function to handle incoming connections.
-  void accept_connections();
-
   std::mutex            mutex;
   int                   server_fd;
-  int                   client_fd;
   std::atomic<bool>     running;
-  std::thread           accept_thread;
   srslog::basic_logger& logger;
 };
 
