@@ -76,13 +76,12 @@ class NetworkHandler:
             True if setup was successful.
         """
         try:
-            self.slo_ctrl_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.slo_ctrl_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.slo_ctrl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.slo_ctrl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             self.slo_ctrl_socket.bind(("0.0.0.0", self.config.slo_ctrl_port))
-            self.slo_ctrl_socket.listen(NetworkConstants.SOCKET_LISTEN_BACKLOG)
             
-            self.logger.log(f"SLO control plane server listening on port {self.config.slo_ctrl_port}")
+            self.logger.log(f"SLO control plane server listening on port {self.config.slo_ctrl_port} (UDP)")
             return True
             
         except Exception as e:
@@ -149,48 +148,32 @@ class NetworkHandler:
         self.metrics_callback = callback
     
     def _handle_slo_ctrl_connections(self) -> None:
-        """Handle incoming SLO control plane connections."""
+        """Handle incoming SLO control plane messages (UDP)."""
         while self.running and self.slo_ctrl_socket:
             try:
-                conn, addr = self.slo_ctrl_socket.accept()
-                self.logger.log(f"New SLO control plane connection from {addr}")
+                data, addr = self.slo_ctrl_socket.recvfrom(NetworkConstants.RECV_BUFFER_SIZE)
+                self.logger.log(f"SLO control plane message from {addr}")
                 
-                threading.Thread(
-                    target=self._handle_slo_ctrl_messages,
-                    args=(conn, addr),
-                    daemon=True,
-                ).start()
+                # Process message directly (no threading needed for UDP)
+                self._process_slo_ctrl_message(data)
                 
             except Exception as e:
                 if self.running:  # Only log if we're still supposed to be running
-                    self.logger.log(f"Error accepting SLO control plane connection: {e}")
+                    self.logger.log(f"Error receiving SLO control plane message: {e}")
     
-    def _handle_slo_ctrl_messages(self, conn: socket.socket, addr) -> None:
-        """Handle messages from a specific SLO control plane connection.
+    def _handle_slo_ctrl_messages(self, data: bytes, addr) -> None:
+        """Process SLO control plane message (UDP version).
         
         Args:
-            conn: Socket connection to the SLO control plane.
+            data: The binary message data to process.
             addr: Address of the SLO control plane client.
         """
         try:
-            self.logger.log(f"SLO control plane client connected from {addr}")
-
-            while self.running:
-                try:
-                    data = conn.recv(NetworkConstants.RECV_BUFFER_SIZE)
-                    if not data:
-                        break
-
-                    self._process_slo_ctrl_message(data)
-
-                except Exception as e:
-                    self.logger.log(f"Error processing SLO control plane message: {e}")
-                    break
-
+            self.logger.log(f"Processing SLO control plane message from {addr}")
+            self._process_slo_ctrl_message(data)
+            
         except Exception as e:
-            self.logger.log(f"Error in SLO control plane message handler: {e}")
-        finally:
-            conn.close()
+            self.logger.log(f"Error processing SLO control plane message: {e}")
     
     def _process_slo_ctrl_message(self, data: bytes) -> None:
         """Process a binary message from SLO control plane.
@@ -321,5 +304,5 @@ class NetworkHandler:
             "slo_ctrl_server_active": self.slo_ctrl_socket is not None,
             "ran_metrics_connected": self.ran_metrics_socket is not None,
             "ran_control_connected": self.ran_control_socket is not None,
-            "active_slo_ctrl_connections": 0 # No longer tracking active SLO control plane connections
+            "active_slo_ctrl_connections": "N/A (UDP)"  # UDP doesn't maintain connections
         } 
