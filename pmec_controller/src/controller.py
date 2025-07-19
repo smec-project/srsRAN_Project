@@ -96,8 +96,9 @@ class PmecController:
         try:
             self.logger.log("Starting PMEC Controller...")
             
-            # Load model if paths are configured
-            if self.config.model_path and self.config.scaler_path:
+            # Load model if paths are configured and not in logs-only mode
+            if (self.config.model_path and self.config.scaler_path and 
+                not self.config.collect_logs_only):
                 self.load_model()
             
             # Start networking
@@ -108,14 +109,17 @@ class PmecController:
             # Set running state
             self.running = True
             
-            # Start priority update thread
-            self.priority_update_thread = threading.Thread(
-                target=self._priority_update_loop,
-                daemon=True
-            )
-            self.priority_update_thread.start()
+            # Start priority update thread only if not in logs-only mode
+            if not self.config.collect_logs_only:
+                self.priority_update_thread = threading.Thread(
+                    target=self._priority_update_loop,
+                    daemon=True
+                )
+                self.priority_update_thread.start()
+                self.logger.log("PMEC Controller started successfully")
+            else:
+                self.logger.log("PMEC Controller started in log collection mode (no priority updates)")
             
-            self.logger.log("PMEC Controller started successfully")
             return True
             
         except Exception as e:
@@ -172,8 +176,9 @@ class PmecController:
         # Stop networking
         self.network_handler.stop_networking()
         
-        # Wait for priority update thread to finish
-        if self.priority_update_thread and self.priority_update_thread.is_alive():
+        # Wait for priority update thread to finish (if it exists)
+        if (self.priority_update_thread and 
+            self.priority_update_thread.is_alive()):
             self.priority_update_thread.join(timeout=1.0)
         
         # Close logger
@@ -193,6 +198,7 @@ class PmecController:
                 "window_size": self.config.window_size,
                 "enable_logging": self.config.enable_logging,
                 "priority_update_interval": self.config.priority_update_interval,
+                "collect_logs_only": self.config.collect_logs_only,
             },
             "network": self.network_handler.get_connection_status(),
             "model": self.model_inference.get_model_info(),

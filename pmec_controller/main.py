@@ -16,6 +16,12 @@ def main():
         help="Enable logging to file (default: False)",
     )
     parser.add_argument(
+        "--collect-logs",
+        action="store_true",
+        default=False,
+        help="Only collect logs without priority adjustment (default: False)",
+    )
+    parser.add_argument(
         "--window-size",
         type=int,
         default=5,
@@ -83,6 +89,7 @@ def main():
         window_size=args.window_size,
         model_path=args.model_path,
         scaler_path=args.scaler_path,
+        collect_logs_only=args.collect_logs,
     )
 
     # Create and start controller
@@ -90,7 +97,10 @@ def main():
 
     if controller.start():
         try:
-            print("PMEC Controller is running. Press Ctrl+C to stop.")
+            if args.collect_logs:
+                print("PMEC Controller is running in log collection mode (no priority adjustment). Press Ctrl+C to stop.")
+            else:
+                print("PMEC Controller is running. Press Ctrl+C to stop.")
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:

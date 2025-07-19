@@ -21,6 +21,7 @@ class ControllerConfig:
         min_ddl: Minimum deadline value in milliseconds.
         priority_update_interval: Interval for priority updates in seconds.
         slot_duration_ms: Duration of each slot in milliseconds.
+        collect_logs_only: If True, only collect logs without priority adjustment.
     """
     slo_ctrl_port: int = 5557
     ran_metrics_ip: str = "127.0.0.1"
@@ -34,6 +35,7 @@ class ControllerConfig:
     min_ddl: float = 0.1
     priority_update_interval: float = 0.001
     slot_duration_ms: float = 0.5
+    collect_logs_only: bool = False
 
 
 # Event type constants
