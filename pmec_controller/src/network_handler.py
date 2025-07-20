@@ -154,20 +154,6 @@ class NetworkHandler:
                 if self.running:  # Only log if we're still supposed to be running
                     self.logger.log(f"Error receiving SLO control plane message: {e}")
     
-    def _handle_slo_ctrl_messages(self, data: bytes, addr) -> None:
-        """Process SLO control plane message (UDP version).
-        
-        Args:
-            data: The binary message data to process.
-            addr: Address of the SLO control plane client.
-        """
-        try:
-            self.logger.log(f"Processing SLO control plane message from {addr}")
-            self._process_slo_ctrl_message(data)
-            
-        except Exception as e:
-            self.logger.log(f"Error processing SLO control plane message: {e}")
-    
     def _process_slo_ctrl_message(self, data: bytes) -> None:
         """Process a binary message from SLO control plane.
         
