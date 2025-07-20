@@ -144,9 +144,9 @@ class PriorityManager:
         self.positive_predictions[rnti] += 1
 
         self.logger.log(f"remaining_time: {remaining_time}, gnb_max_prb_slot: {gnb_max_prb_slot}, latest_bsr_slot: {latest_bsr_slot}")
-        
+        adjusted_remaining = remaining_time
         # Calculate adjusted remaining time based on slot differences
-        adjusted_remaining = remaining_time - (gnb_max_prb_slot - latest_bsr_slot) * 0.5
+        # adjusted_remaining = remaining_time - (gnb_max_prb_slot - latest_bsr_slot) * 0.5
         
         # Add new request with its remaining time
         if rnti not in self.ue_remaining_times:
