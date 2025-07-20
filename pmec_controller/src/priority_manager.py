@@ -142,6 +142,8 @@ class PriorityManager:
         
         # Update positive prediction counter
         self.positive_predictions[rnti] += 1
+
+        self.logger.log(f"remaining_time: {remaining_time}, gnb_max_prb_slot: {gnb_max_prb_slot}, latest_bsr_slot: {latest_bsr_slot}")
         
         # Calculate adjusted remaining time based on slot differences
         adjusted_remaining = remaining_time - (gnb_max_prb_slot - latest_bsr_slot) * 0.5

@@ -86,7 +86,7 @@ class EventProcessor:
         )
 
         # If new slot is less than previous slot, we've wrapped around
-        if slot < prev_raw_slot:
+        if slot < prev_raw_slot and prev_raw_slot - slot > 10240:
             cycles[rnti] += 1
 
         absolute_slot = slot + (cycles[rnti] * NetworkConstants.SLOT_MAX)
