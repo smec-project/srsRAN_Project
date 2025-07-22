@@ -75,7 +75,7 @@ def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> f
     Returns:
         Result of division or default value.
     """
-    if abs(denominator) < 1e-6:
+    if abs(denominator) < 1e-10:
         return default
     return numerator / denominator
 
