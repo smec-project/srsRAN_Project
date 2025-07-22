@@ -536,12 +536,12 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   // Get RNTI as unsigned value
   unsigned rnti_val = static_cast<unsigned>(u.crnti()) & 0xFFFF;
 
-  double offset = 0.0;
+  double deadline_priority = 0.0;
   {
     std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
     auto                        it = scheduler_time_pf::ul_priorities.find(rnti_val);
     if (it != scheduler_time_pf::ul_priorities.end()) {
-      offset = it->second;
+      deadline_priority = it->second;
     }
   }
 
@@ -562,11 +562,7 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   const double rate_weight = compute_ul_rate_weight(
       u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
 
-  ul_prio = rate_weight * pf_weight + offset;
-  // if (offset != 0) {
-  //   std::cout << "UL priority for UE 0x" << std::hex << rnti_val << std::dec << ": "
-  //             << rate_weight*pf_weight << " + " << offset << " = " << ul_prio << std::endl;
-  // }
+  ul_prio         = rate_weight * pf_weight + deadline_priority;
   sr_ind_received = u.has_pending_sr();
 }
 

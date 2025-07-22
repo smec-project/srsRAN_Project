@@ -111,8 +111,9 @@ class PriorityManager:
             updated_times = []
             for req_id, remaining in self.ue_remaining_times[rnti]:
                 new_remaining = remaining - time_passed
-                if new_remaining > 0:  # Only keep requests with remaining time > 0
-                    updated_times.append((req_id, new_remaining))
+                # Set remaining time to 0 if negative, but keep the request
+                actual_remaining = max(0, new_remaining)
+                updated_times.append((req_id, actual_remaining))
             
             self.ue_remaining_times[rnti] = updated_times
         
@@ -185,7 +186,7 @@ class PriorityManager:
         # Priority calculation: BSR / (remaining_time^2 + epsilon)
         priority = safe_divide(
             current_bsr, 
-            remaining_seconds * remaining_seconds + 1e-6,
+            remaining_seconds * remaining_seconds + 1e-8,
             default=0.0
         )
         
