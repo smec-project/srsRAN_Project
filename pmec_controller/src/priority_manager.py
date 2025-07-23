@@ -171,6 +171,12 @@ class PriorityManager:
         Returns:
             Calculated priority value.
         """
+        # Check if UE is registered and get slo_latency
+        slo_latency = self.ue_info.get(rnti, {}).get("slo_latency", None)
+        if slo_latency is not None and slo_latency > 1000:
+            # For non-low-latency applications, always return 0 priority
+            return 0.0
+        
         if (rnti not in self.ue_remaining_times or 
             not self.ue_remaining_times[rnti]):
             return 0.0
