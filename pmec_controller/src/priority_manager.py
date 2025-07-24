@@ -111,10 +111,8 @@ class PriorityManager:
             updated_times = []
             for req_id, remaining in self.ue_remaining_times[rnti]:
                 new_remaining = remaining - time_passed
-                # Set remaining time to 0 if negative, but keep the request
-                actual_remaining = max(0, new_remaining)
-                updated_times.append((req_id, actual_remaining))
-            
+                # Allow remaining time to be negative
+                updated_times.append((req_id, new_remaining))
             self.ue_remaining_times[rnti] = updated_times
         
         # Update last event time
@@ -189,12 +187,16 @@ class PriorityManager:
         remaining_seconds = current_remaining / 1000.0
         current_bsr = self.ue_latest_bsr.get(rnti, 0)
         
-        # Priority calculation: BSR / (remaining_time^2 + epsilon)
-        priority = safe_divide(
-            current_bsr, 
-            remaining_seconds * remaining_seconds + 1e-8,
-            default=0.0
-        )
+        if current_remaining < 0:
+            # Use new formula when remaining_time < 0
+            priority = safe_divide(current_bsr, 1e-8, default=0.0) - current_bsr * current_remaining
+        else:
+            # Priority calculation: BSR / (remaining_time^2 + epsilon)
+            priority = safe_divide(
+                current_bsr, 
+                remaining_seconds * remaining_seconds + 1e-8,
+                default=0.0
+            )
         
         return priority
     
