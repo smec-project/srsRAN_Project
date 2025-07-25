@@ -139,6 +139,10 @@ class PmecController:
         
         while self.running:
             try:
+                # Update all remaining times first
+                current_time = time.time()
+                self.priority_manager.update_all_remaining_times(current_time)
+                
                 # Get all registered UEs
                 registered_ues = list(self.priority_manager.ue_info.keys())
                 

@@ -89,9 +89,6 @@ class MetricsProcessor:
             # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "SR", timestamp, slot)
             
-            # Update remaining times in priority manager
-            self.priority_manager.update_remaining_times(rnti, timestamp)
-            
         except Exception as e:
             self.logger.log(f"Error processing SR metrics: {e}")
     
@@ -108,7 +105,6 @@ class MetricsProcessor:
             
             # Update priority manager state - use rnti directly as integer
             self.priority_manager.update_bsr_state(rnti, bytes_val)
-            self.priority_manager.update_remaining_times(rnti, timestamp)
             
             # Initialize FIFO queue if not exists
             if rnti not in self.ue_bsr_events:
@@ -156,9 +152,6 @@ class MetricsProcessor:
             
             # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "PRB", timestamp, slot, prbs=prbs)
-            
-            # Update remaining times in priority manager
-            self.priority_manager.update_remaining_times(rnti, timestamp)
             
         except Exception as e:
             self.logger.log(f"Error processing PRB metrics: {e}")

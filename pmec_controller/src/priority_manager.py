@@ -92,6 +92,15 @@ class PriorityManager:
             self.ue_remaining_times[rnti] = []
             self.logger.log(f"Cleared remaining times for RNTI 0x{rnti:x} (BSR=0)")
     
+    def update_all_remaining_times(self, current_time: float) -> None:
+        """Update remaining times for all registered UEs.
+        
+        Args:
+            current_time: Current timestamp.
+        """
+        for rnti in self.ue_info.keys():
+            self.update_remaining_times(rnti, current_time)
+    
     def update_remaining_times(self, rnti: int, current_time: float) -> None:
         """Update remaining times for all active requests of a UE.
         
@@ -111,7 +120,8 @@ class PriorityManager:
             updated_times = []
             for req_id, remaining in self.ue_remaining_times[rnti]:
                 new_remaining = remaining - time_passed
-                # Allow remaining time to be negative
+                # Only keep requests with remaining_time >= -10ms
+                # if new_remaining >= -10:
                 updated_times.append((req_id, new_remaining))
             self.ue_remaining_times[rnti] = updated_times
         
