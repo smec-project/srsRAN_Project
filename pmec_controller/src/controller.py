@@ -11,6 +11,7 @@ from .model_inference import ModelInference
 from .priority_manager import PriorityManager
 from .metrics_processor import MetricsProcessor
 from .network_handler import NetworkHandler
+from .debug_receiver import DebugReceiver
 
 
 class PmecController:
@@ -60,6 +61,9 @@ class PmecController:
             self.metrics_processor.process_metrics_data
         )
         
+        # Initialize debug receiver
+        self.debug_receiver = DebugReceiver(self.logger)
+        
         # Controller state
         self.running = False
         self.priority_update_thread: Optional[threading.Thread] = None
@@ -105,6 +109,9 @@ class PmecController:
             if not self.network_handler.start_networking():
                 self.logger.log("Failed to start network handler")
                 return False
+            
+            # Start debug receiver
+            self.debug_receiver.start()
             
             # Set running state
             self.running = True
@@ -180,6 +187,9 @@ class PmecController:
         if (self.priority_update_thread and 
             self.priority_update_thread.is_alive()):
             self.priority_update_thread.join(timeout=1.0)
+        
+        # Stop debug receiver
+        self.debug_receiver.stop()
         
         # Close logger
         self.logger.close()
