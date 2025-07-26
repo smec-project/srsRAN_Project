@@ -165,6 +165,9 @@ class PriorityManager:
             (self.positive_predictions[rnti], adjusted_remaining)
         )
         
+        # Update last event time when adding new request
+        self.ue_last_event_time[rnti] = get_current_timestamp()
+        
         self.logger.log(
             f"Added new request for RNTI 0x{rnti:x}: Request_{self.positive_predictions[rnti]}, "
             f"Remaining time: {adjusted_remaining:.2f}ms"
