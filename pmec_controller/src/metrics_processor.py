@@ -300,11 +300,15 @@ class MetricsProcessor:
                     - ((latest_bsr[3] - prb_time) * 1000)
                 )
         
+        # Calculate BSR increment (current - previous) as request size
+        bsr_increment = latest_bsr[1] - prev_bsr[1]  # BSR bytes difference
+        
         # Add the new request
         self.priority_manager.add_new_request(
             rnti, remaining_time, 
             self.event_processor.gnb_max_prb_slot, 
-            int(latest_bsr[4])
+            int(latest_bsr[4]),
+            bsr_increment
         )
     
     def _log_prediction_result(

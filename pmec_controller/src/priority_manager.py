@@ -28,9 +28,12 @@ class PriorityManager:
         self.ue_priorities: Dict[int, float] = {}
         self.ue_latest_bsr: Dict[int, int] = {}
         
-        # Track request remaining times for each UE
-        self.ue_remaining_times: Dict[int, List[Tuple[int, float]]] = {}
+        # Track request remaining times and sizes for each UE
+        self.ue_remaining_times: Dict[int, List[Tuple[int, float, int]]] = {}
         self.ue_last_event_time: Dict[int, float] = {}
+        
+        # Track BSR decrease accumulation for intelligent request removal
+        self.ue_bsr_decrease_accumulation: Dict[int, int] = {}
         
         # Counter for positive predictions
         self.positive_predictions: Dict[int, int] = {}
@@ -66,6 +69,8 @@ class PriorityManager:
         # Initialize tracking structures
         if rnti not in self.ue_remaining_times:
             self.ue_remaining_times[rnti] = []
+        if rnti not in self.ue_bsr_decrease_accumulation:
+            self.ue_bsr_decrease_accumulation[rnti] = 0
         if rnti not in self.positive_predictions:
             self.positive_predictions[rnti] = 0
         if rnti not in self.ue_last_event_time:
@@ -79,18 +84,86 @@ class PriorityManager:
         )
     
     def update_bsr_state(self, rnti: int, bsr_bytes: int) -> None:
-        """Update the latest BSR state for a UE.
+        """Update the latest BSR state for a UE and handle request removal logic.
         
         Args:
             rnti: Radio Network Temporary Identifier as integer.
             bsr_bytes: BSR value in bytes.
         """
+        # Get previous BSR value
+        previous_bsr = self.ue_latest_bsr.get(rnti, 0)
+        
+        # Update current BSR
         self.ue_latest_bsr[rnti] = bsr_bytes
         
-        # If BSR is 0, clear all remaining times
-        if bsr_bytes == 0 and rnti in self.ue_remaining_times:
-            self.ue_remaining_times[rnti] = []
+        # Initialize accumulation if not exists
+        if rnti not in self.ue_bsr_decrease_accumulation:
+            self.ue_bsr_decrease_accumulation[rnti] = 0
+        
+        # If BSR is 0, clear all remaining times and reset accumulation
+        if bsr_bytes == 0:
+            if rnti in self.ue_remaining_times:
+                self.ue_remaining_times[rnti] = []
+            self.ue_bsr_decrease_accumulation[rnti] = 0
             self.logger.log(f"Cleared remaining times for RNTI 0x{rnti:x} (BSR=0)")
+            return
+        
+        # Calculate BSR change
+        bsr_change = bsr_bytes - previous_bsr
+        
+        # If BSR decreased, accumulate the decrease
+        if bsr_change < 0:
+            decrease_amount = abs(bsr_change)
+            self.ue_bsr_decrease_accumulation[rnti] += decrease_amount
+            
+            self.logger.log(
+                f"BSR decreased for RNTI 0x{rnti:x}: -{decrease_amount} bytes, "
+                f"Total accumulated: {self.ue_bsr_decrease_accumulation[rnti]} bytes"
+            )
+            
+            # Check if we can remove the oldest request
+            self._check_and_remove_completed_requests(rnti)
+    
+    def _check_and_remove_completed_requests(self, rnti: int) -> None:
+        """Check and remove completed requests based on BSR decrease accumulation.
+        
+        Args:
+            rnti: Radio Network Temporary Identifier as integer.
+        """
+        if (rnti not in self.ue_remaining_times or 
+            not self.ue_remaining_times[rnti] or
+            rnti not in self.ue_bsr_decrease_accumulation):
+            return
+        
+        accumulated_decrease = self.ue_bsr_decrease_accumulation[rnti]
+        
+        # Remove requests while accumulated decrease is sufficient
+        while (self.ue_remaining_times[rnti] and 
+               accumulated_decrease > 0):
+            
+            oldest_request = self.ue_remaining_times[rnti][0]
+            req_id, remaining_time, request_size = oldest_request
+            
+            # If accumulated decrease >= request size, remove this request
+            if accumulated_decrease >= request_size:
+                self.ue_remaining_times[rnti].pop(0)
+                accumulated_decrease -= request_size
+                
+                self.logger.log(
+                    f"Removed completed request for RNTI 0x{rnti:x}: "
+                    f"Request_{req_id} (size={request_size} bytes), "
+                    f"Remaining accumulated: {accumulated_decrease} bytes"
+                )
+            else:
+                # Not enough accumulated decrease to remove this request
+                break
+        
+        # Update the remaining accumulation
+        self.ue_bsr_decrease_accumulation[rnti] = accumulated_decrease
+        
+        # If no more requests, reset accumulation to 0
+        if not self.ue_remaining_times[rnti]:
+            self.ue_bsr_decrease_accumulation[rnti] = 0
     
     def update_all_remaining_times(self, current_time: float) -> None:
         """Update remaining times for all registered UEs.
@@ -118,11 +191,11 @@ class PriorityManager:
         if time_passed > 0:
             # Update all remaining times
             updated_times = []
-            for req_id, remaining in self.ue_remaining_times[rnti]:
+            for req_id, remaining, size in self.ue_remaining_times[rnti]:
                 new_remaining = remaining - time_passed
                 # Only keep requests with remaining_time >= -10ms
                 # if new_remaining >= -10:
-                updated_times.append((req_id, new_remaining))
+                updated_times.append((req_id, new_remaining, size))
             self.ue_remaining_times[rnti] = updated_times
         
         # Update last event time
@@ -134,15 +207,17 @@ class PriorityManager:
         remaining_time: float, 
         gnb_max_prb_slot: int,
         latest_bsr_slot: int,
+        bsr_increment: int = 0,
         event_processor_data: dict = None
     ) -> None:
-        """Add a new request for a UE with calculated remaining time.
+        """Add a new request for a UE with calculated remaining time and size.
         
         Args:
             rnti: Radio Network Temporary Identifier as integer.
             remaining_time: Initial remaining time for the request.
             gnb_max_prb_slot: Global maximum PRB slot.
             latest_bsr_slot: Slot number of the latest BSR.
+            bsr_increment: BSR increment (current_bsr - previous_bsr) as request size.
             event_processor_data: Additional data from event processor.
         """
         if rnti not in self.ue_info:
@@ -157,12 +232,12 @@ class PriorityManager:
         # Calculate adjusted remaining time based on slot differences
         # adjusted_remaining = remaining_time - (gnb_max_prb_slot - latest_bsr_slot) * 0.5
         
-        # Add new request with its remaining time
+        # Add new request with its remaining time and size
         if rnti not in self.ue_remaining_times:
             self.ue_remaining_times[rnti] = []
         
         self.ue_remaining_times[rnti].append(
-            (self.positive_predictions[rnti], adjusted_remaining)
+            (self.positive_predictions[rnti], adjusted_remaining, bsr_increment)
         )
         
         # Update last event time when adding new request
@@ -170,7 +245,7 @@ class PriorityManager:
         
         self.logger.log(
             f"Added new request for RNTI 0x{rnti:x}: Request_{self.positive_predictions[rnti]}, "
-            f"Remaining time: {adjusted_remaining:.2f}ms"
+            f"Remaining time: {adjusted_remaining:.2f}ms, Size: {bsr_increment} bytes"
         )
     
     def calculate_priority(self, rnti: int) -> float:
@@ -192,9 +267,10 @@ class PriorityManager:
             not self.ue_remaining_times[rnti]):
             return 0.0
         
-        # Get first (oldest) request's remaining time
+        # Get first (oldest) request's remaining time and size
         oldest_req = self.ue_remaining_times[rnti][0]
         current_remaining = oldest_req[1]
+        request_size = oldest_req[2]
         
         # Convert remaining time from ms to s and calculate priority
         remaining_seconds = current_remaining / 1000.0
@@ -242,7 +318,8 @@ class PriorityManager:
                 log_msg = (
                     f"Updated priority for RNTI 0x{rnti:x}: "
                     f"Priority={new_priority:.2f}, "
-                    f"Remaining_time={oldest_req[1]:.2f}ms"
+                    f"Remaining_time={oldest_req[1]:.2f}ms, "
+                    f"Size={oldest_req[2]} bytes"
                 )
             else:
                 log_msg = f"Reset priority for RNTI 0x{rnti:x}"
@@ -273,8 +350,8 @@ class PriorityManager:
             return "No active requests"
         
         summary_parts = []
-        for req_id, remaining in self.ue_remaining_times[rnti]:
-            summary_parts.append(f"Request_{req_id}_remaining={remaining:.2f}ms")
+        for req_id, remaining, size in self.ue_remaining_times[rnti]:
+            summary_parts.append(f"Request_{req_id}_remaining={remaining:.2f}ms_size={size}bytes")
         
         total_positive = self.positive_predictions.get(rnti, 0)
         return f"Total positive predictions: {total_positive}, " + ", ".join(summary_parts)
@@ -290,6 +367,7 @@ class PriorityManager:
             self.ue_latest_bsr,
             self.ue_remaining_times,
             self.ue_last_event_time,
+            self.ue_bsr_decrease_accumulation,
             self.positive_predictions,
             self.ue_info
         ]
