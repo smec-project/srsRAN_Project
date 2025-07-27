@@ -33,7 +33,7 @@ class ControllerConfig:
     model_path: Optional[str] = None
     scaler_path: Optional[str] = None
     min_ddl: float = 0.1
-    priority_update_interval: float = 0.001
+    priority_update_interval: float = 0.002
     slot_duration_ms: float = 0.5
     collect_logs_only: bool = False
 
