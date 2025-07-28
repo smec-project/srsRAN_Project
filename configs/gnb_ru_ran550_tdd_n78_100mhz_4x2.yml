@@ -1,5 +1,5 @@
 # This example configuration outlines how to configure the srsRAN Project CU/DU to use an O-RU and split 7.2. This is specifically for use
-# with the Benetel R550 RU. This config will create a single TDD MIMO cell transmitting in band 78, with 100 MHz bandwidth and 30 kHz sub-carrier-spacing.
+# with the Benetel RAN550 RU. This config will create a single TDD MIMO cell transmitting in band 78, with 100 MHz bandwidth and 30 kHz sub-carrier-spacing.
 # The parameters used to configure the RU are found in the `ru_ofh` sub-section. This configuration makes used of the OFH Lib from SRS to enable split 7.2.
 
 cu_cp:
@@ -15,33 +15,33 @@ cu_cp:
               - sst: 1
 
 ru_ofh:
-  t1a_max_cp_dl: 535
-  t1a_min_cp_dl: 286
-  t1a_max_cp_ul: 535
-  t1a_min_cp_ul: 286
-  t1a_max_up: 390
-  t1a_min_up: 80
-  ta4_max: 500
-  ta4_min: 25
-  is_prach_cp_enabled: false
-  compr_method_ul: bfp
-  compr_bitwidth_ul: 9
-  compr_method_dl: bfp
-  compr_bitwidth_dl: 9
-  compr_method_prach: bfp
-  compr_bitwidth_prach: 9
-  enable_ul_static_compr_hdr: true
-  enable_dl_static_compr_hdr: true
-  iq_scaling: 5.5
+  t1a_max_cp_dl: 470
+  t1a_min_cp_dl: 419
+  t1a_max_cp_ul: 336
+  t1a_min_cp_ul: 285
+  t1a_max_up: 345
+  t1a_min_up: 294
+  ta4_max: 200
+  ta4_min: 0
+  is_prach_cp_enabled: true            # Configures if Control-Plane messages should be used to receive PRACH messages.
+  compr_method_ul: bfp                 # Uplink compression method.
+  compr_bitwidth_ul: 9                 # Uplink IQ samples bitwidth after compression.
+  compr_method_dl: bfp                 # Downlink compression method.
+  compr_bitwidth_dl: 9                 # Downlink IQ samples bitwidth after compression.
+  compr_method_prach: bfp              # PRACH compression method.
+  compr_bitwidth_prach: 9              # PRACH IQ samples bitwidth after compression.
+  enable_ul_static_compr_hdr: false    # Configures if the compression header is present for uplink User-Plane messages (false) or not present (true).
+  enable_dl_static_compr_hdr: false    # Configures if the compression header is present for downlink User-Plane messages (false) or not present (true).
+  iq_scaling: 20                       # IQ samples scaling factor applied before compression.
   cells:
-    - network_interface: eno8403np1
-      ru_mac_addr: 8c:1f:64:d1:13:d3           # Replace with the RU MAC address.
-      du_mac_addr: c8:4b:d6:9d:5b:1f           # Replace with the MAC address of the DU interface.
-      vlan_tag_cp: 5
-      vlan_tag_up: 5
-      prach_port_id: [4, 5]
-      dl_port_id: [0, 1, 2, 3]
-      ul_port_id: [0, 1]
+    - network_interface: eno8403np1      # Ethernet interface name used to communicate with the RU.
+      ru_mac_addr: 8c:1f:64:d1:14:93   # RU MAC address.
+      du_mac_addr: c8:4b:d6:9d:5b:1f   # DU MAC address.
+      vlan_tag_cp: 5                   # VLAN tag value for CP.
+      vlan_tag_up: 5                   # VLAN tag value for UP.
+      prach_port_id: [4, 5]            # PRACH eAxC port value.
+      dl_port_id: [0, 1, 2, 3]         # Downlink eAxC port values.
+      ul_port_id: [0, 1]               # Uplink eAxC port values.
 
 cell_cfg:
   dl_arfcn: 637212
@@ -54,10 +54,11 @@ cell_cfg:
   nof_antennas_dl: 4
   nof_antennas_ul: 2
   prach:
-    prach_config_index: 7
+    prach_config_index: 159
     prach_root_sequence_index: 1
     zero_correlation_zone: 0
-    prach_frequency_start: 0
+  ssb:
+    ssb_block_power_dbm: -11
   tdd_ul_dl_cfg:
     dl_ul_tx_period: 10
     nof_dl_slots: 7
