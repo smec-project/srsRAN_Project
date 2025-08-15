@@ -1,4 +1,4 @@
-"""Event processing and windowing functionality for PMEC Controller."""
+"""Event processing and windowing functionality for SMEC Controller."""
 
 import numpy as np
 from typing import Dict, List, Optional

@@ -1,4 +1,4 @@
-"""Main PMEC Controller class that orchestrates all components."""
+"""Main SMEC Controller class that orchestrates all components."""
 
 import threading
 import time
@@ -14,8 +14,8 @@ from .network_handler import NetworkHandler
 from .debug_receiver import DebugReceiver
 
 
-class PmecController:
-    """Main PMEC Controller class.
+class SmecController:
+    """Main SMEC Controller class.
     
     Orchestrates all components including network handling, event processing,
     model inference, priority management, and metrics processing for
@@ -23,7 +23,7 @@ class PmecController:
     """
     
     def __init__(self, config: Optional[ControllerConfig] = None):
-        """Initialize the PMEC Controller.
+        """Initialize the SMEC Controller.
         
         Args:
             config: Configuration settings. Uses default if None.
@@ -68,7 +68,7 @@ class PmecController:
         self.running = False
         self.priority_update_thread: Optional[threading.Thread] = None
         
-        self.logger.log("PMEC Controller initialized")
+        self.logger.log("SMEC Controller initialized")
     
     def load_model(self, model_path: Optional[str] = None, scaler_path: Optional[str] = None) -> bool:
         """Load machine learning model and scaler.
@@ -92,13 +92,13 @@ class PmecController:
         return success
     
     def start(self) -> bool:
-        """Start the PMEC Controller and all its components.
+        """Start the SMEC Controller and all its components.
         
         Returns:
             True if controller was started successfully.
         """
         try:
-            self.logger.log("Starting PMEC Controller...")
+            self.logger.log("Starting SMEC Controller...")
             
             # Load model if paths are configured and not in logs-only mode
             if (self.config.model_path and self.config.scaler_path and 
@@ -123,14 +123,14 @@ class PmecController:
                     daemon=True
                 )
                 self.priority_update_thread.start()
-                self.logger.log("PMEC Controller started successfully")
+                self.logger.log("SMEC Controller started successfully")
             else:
-                self.logger.log("PMEC Controller started in log collection mode (no priority updates)")
+                self.logger.log("SMEC Controller started in log collection mode (no priority updates)")
             
             return True
             
         except Exception as e:
-            self.logger.log(f"Error starting PMEC Controller: {e}")
+            self.logger.log(f"Error starting SMEC Controller: {e}")
             return False
     
     def _priority_update_loop(self) -> None:
@@ -178,8 +178,8 @@ class PmecController:
         self.logger.log("Priority update thread stopped")
     
     def stop(self) -> None:
-        """Stop the PMEC Controller and clean up all resources."""
-        self.logger.log("Stopping PMEC Controller...")
+        """Stop the SMEC Controller and clean up all resources."""
+        self.logger.log("Stopping SMEC Controller...")
         
         # Set running state to False
         self.running = False
@@ -198,7 +198,7 @@ class PmecController:
         # Close logger
         self.logger.close()
         
-        print("PMEC Controller stopped")
+        print("SMEC Controller stopped")
     
     def get_system_status(self) -> Dict[str, any]:
         """Get comprehensive system status information.

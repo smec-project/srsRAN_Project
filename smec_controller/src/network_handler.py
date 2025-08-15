@@ -1,4 +1,4 @@
-"""Network communication handling for PMEC Controller."""
+"""Network communication handling for SMEC Controller."""
 
 import socket
 import struct

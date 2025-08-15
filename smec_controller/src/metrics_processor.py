@@ -1,4 +1,4 @@
-"""RAN metrics processing functionality for PMEC Controller."""
+"""RAN metrics processing functionality for SMEC Controller."""
 
 import struct
 from typing import Dict, List, Optional, Any

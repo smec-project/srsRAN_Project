@@ -1,4 +1,4 @@
-"""Machine learning model inference functionality for PMEC Controller."""
+"""Machine learning model inference functionality for SMEC Controller."""
 
 import numpy as np
 from typing import Optional, Tuple, Any

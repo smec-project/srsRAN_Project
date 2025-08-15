@@ -46,7 +46,7 @@ ru_ofh:
 cell_cfg:
   dl_arfcn: 637212
   band: 78
-  channel_bandwidth_MHz: 100
+  channel_bandwidth_MHz: 40
   common_scs: 30
   plmn: "00101"
   tac: 7

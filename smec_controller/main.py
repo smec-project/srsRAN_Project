@@ -1,14 +1,14 @@
-"""Main entry point for the PMEC Controller application."""
+"""Main entry point for the SMEC Controller application."""
 
 import argparse
 import time
 
-from src import PmecController, ControllerConfig
+from src import SmecController, ControllerConfig
 
 
 def main():
-    """Main function to run the PMEC Controller."""
-    parser = argparse.ArgumentParser(description="PMEC Controller")
+    """Main function to run the SMEC Controller."""
+    parser = argparse.ArgumentParser(description="SMEC Controller")
     parser.add_argument(
         "--log",
         action="store_true",
@@ -93,14 +93,14 @@ def main():
     )
 
     # Create and start controller
-    controller = PmecController(config)
+    controller = SmecController(config)
 
     if controller.start():
         try:
             if args.collect_logs:
-                print("PMEC Controller is running in log collection mode (no priority adjustment). Press Ctrl+C to stop.")
+                print("SMEC Controller is running in log collection mode (no priority adjustment). Press Ctrl+C to stop.")
             else:
-                print("PMEC Controller is running. Press Ctrl+C to stop.")
+                print("SMEC Controller is running. Press Ctrl+C to stop.")
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
@@ -108,7 +108,7 @@ def main():
         finally:
             controller.stop()
     else:
-        print("Failed to start PMEC Controller")
+        print("Failed to start SMEC Controller")
         return 1
 
     return 0

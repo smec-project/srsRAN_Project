@@ -1,11 +1,11 @@
-"""Utility functions and logging for PMEC Controller."""
+"""Utility functions and logging for SMEC Controller."""
 
 import time
 from typing import Optional, TextIO
 
 
 class Logger:
-    """Simple logger for the PMEC Controller.
+    """Simple logger for the SMEC Controller.
     
     Provides basic logging functionality with optional file output.
     """

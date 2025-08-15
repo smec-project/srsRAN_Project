@@ -1,4 +1,4 @@
-"""Configuration constants and settings for PMEC Controller."""
+"""Configuration constants and settings for SMEC Controller."""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -6,7 +6,7 @@ from typing import Optional
 
 @dataclass
 class ControllerConfig:
-    """Configuration settings for the PMEC Controller.
+    """Configuration settings for the SMEC Controller.
     
     Attributes:
         slo_ctrl_port: Port to receive SLO control plane messages from users.

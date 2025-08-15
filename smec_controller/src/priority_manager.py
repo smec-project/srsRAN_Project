@@ -1,4 +1,4 @@
-"""Priority management functionality for PMEC Controller."""
+"""Priority management functionality for SMEC Controller."""
 
 
 from typing import Dict, List, Tuple
