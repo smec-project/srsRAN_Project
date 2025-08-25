@@ -3,5 +3,6 @@ labeled_data
 models
 eval_data
 raw_data
+controller.txt
 *.log
 __pycache__

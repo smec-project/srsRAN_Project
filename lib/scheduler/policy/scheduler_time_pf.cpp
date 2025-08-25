@@ -562,11 +562,12 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   const double rate_weight = compute_ul_rate_weight(
       u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
 
-  if (deadline_priority > 0) {
-    ul_prio = deadline_priority;
-  } else {
-    ul_prio = rate_weight * pf_weight;
-  }
+  // if (deadline_priority > 0) {
+  //   ul_prio = deadline_priority;
+  // } else {
+  //   ul_prio = rate_weight * pf_weight;
+  // }
+  ul_prio         = rate_weight * pf_weight + deadline_priority;
   sr_ind_received = u.has_pending_sr();
 }
 
