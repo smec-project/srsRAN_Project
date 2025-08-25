@@ -101,10 +101,6 @@ class TuttiController:
         self.priority_thread = threading.Thread(target=self._update_priorities)
         self.priority_thread.start()
 
-        # Add mapping between UE_IDX and RNTI
-        self.ue_idx_to_rnti = {}  # UE_IDX -> RNTI
-        self.rnti_to_ue_idx = {}  # RNTI -> UE_IDX
-
     def start(self):
         """
         Start the controller and all its connections.
