@@ -37,9 +37,9 @@ class TuttiController:
         self.ran_metrics_ip = ran_metrics_ip
         self.ran_metrics_port = ran_metrics_port
 
-        # RAN control connection setup
+        # RAN control connection setup (UDP)
         self.ran_control_socket = socket.socket(
-            socket.AF_INET, socket.SOCK_STREAM
+            socket.AF_INET, socket.SOCK_DGRAM
         )
         self.ran_control_socket.setsockopt(
             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
@@ -111,14 +111,14 @@ class TuttiController:
         """
         self.running = True
 
-        # Bind RAN metrics socket and connect RAN control socket
+        # Bind RAN metrics socket (UDP control socket doesn't need connect)
         try:
             self.ran_metrics_socket.bind(
                 (self.ran_metrics_ip, self.ran_metrics_port)
             )
-            self.ran_control_socket.connect(
-                (self.ran_control_ip, self.ran_control_port)
-            )
+            self.log_file.write(f"RAN metrics UDP server listening on {self.ran_metrics_ip}:{self.ran_metrics_port}\n")
+            self.log_file.write(f"RAN control UDP sender initialized (target: {self.ran_control_ip}:{self.ran_control_port})\n")
+            self.log_file.flush()
         except Exception as e:
             self.log_file.write(f"Failed to setup RAN services: {e}\n")
             self.log_file.flush()
@@ -295,24 +295,33 @@ class TuttiController:
 
     def _handle_ran_metrics(self):
         """
-        Receive and process RAN metrics.
+        Receive and process RAN metrics (UDP binary format).
         """
         while self.running:
             try:
-                data = self.ran_metrics_socket.recv(1024).decode("utf-8")
+                data, addr = self.ran_metrics_socket.recvfrom(1024)
                 if not data:
                     continue
 
-                for line in data.strip().split("\n"):
-                    values = dict(item.split("=") for item in line.split(","))
-                    msg_type = values["TYPE"]
-
-                    if msg_type == "PRB":
-                        self._handle_prb_metrics(values)
-                    elif msg_type == "SR":
-                        self._handle_sr_metrics(values)
-                    elif msg_type == "BSR":
-                        self._handle_bsr_metrics(values)
+                # Process binary messages (16 bytes each: 4 x 32-bit integers)
+                message_size = 16
+                offset = 0
+                
+                while offset + message_size <= len(data):
+                    # Unpack: msg_type, rnti, field1, field2
+                    msg_type, rnti, field1, field2 = struct.unpack('IIII', data[offset:offset + message_size])
+                    
+                    if msg_type == 0:  # PRB
+                        self._handle_prb_metrics(rnti, field1, field2)
+                    elif msg_type == 1:  # SR
+                        self._handle_sr_metrics(rnti, field1)
+                    elif msg_type == 2:  # BSR
+                        self._handle_bsr_metrics(rnti, field1, field2)
+                    else:
+                        self.log_file.write(f"Unknown metrics type: {msg_type}\n")
+                        self.log_file.flush()
+                    
+                    offset += message_size
 
             except Exception as e:
                 self.log_file.write(f"Error receiving RAN metrics: {e}\n")
@@ -320,16 +329,20 @@ class TuttiController:
 
     def set_priority(self, rnti: str, priority: float):
         """
-        Send priority update to RAN.
+        Send priority update to RAN via UDP.
         """
         try:
-            # Format RNTI string and pack message in the correct format
-            rnti_str = f"{rnti:<4}".encode(
-                "ascii"
-            )  # Left align, space pad to 4 chars
-            msg = struct.pack("=5sdb", rnti_str, priority, False)
+            # Convert string RNTI to integer for binary format compatibility
+            rnti_int = int(rnti, 16)  # Convert hex string to int
+            
+            # Pack message: RNTI as int, priority as double, reset as bool
+            msg = struct.pack("=IdB", rnti_int, priority, False)
 
-            self.ran_control_socket.send(msg)
+            # Send via UDP to target address
+            self.ran_control_socket.sendto(
+                msg,
+                (self.ran_control_ip, self.ran_control_port)
+            )
             return True
         except Exception as e:
             self.log_file.write(f"Failed to send priority update: {e}\n")
@@ -338,17 +351,24 @@ class TuttiController:
 
     def reset_priority(self, rnti: str):
         """
-        Reset priority for a specific RNTI.
+        Reset priority for a specific RNTI via UDP.
         """
         try:
             # Reset priority state
             if rnti in self.ue_priorities:
                 self.ue_priorities[rnti] = 0.0
 
-            # Reset in scheduler
-            rnti_str = f"{rnti:<4}".encode("ascii")
-            msg = struct.pack("=5sdb", rnti_str, 0.0, True)
-            self.ran_control_socket.send(msg)
+            # Convert string RNTI to integer for binary format compatibility
+            rnti_int = int(rnti, 16)  # Convert hex string to int
+            
+            # Pack reset message: RNTI as int, 0.0 priority, reset=True
+            msg = struct.pack("=IdB", rnti_int, 0.0, True)
+            
+            # Send via UDP to target address
+            self.ran_control_socket.sendto(
+                msg,
+                (self.ran_control_ip, self.ran_control_port)
+            )
             return True
         except Exception as e:
             self.log_file.write(f"Failed to reset priority: {e}\n")
@@ -370,23 +390,22 @@ class TuttiController:
                 pass
 
         # Close server sockets
-        try:
-            self.app_socket.shutdown(socket.SHUT_RDWR)
-            self.app_socket.close()
-        except:
-            pass
-
-        try:
-            self.ran_metrics_socket.shutdown(socket.SHUT_RDWR)
-            self.ran_metrics_socket.close()
-        except:
-            pass
-
-        try:
-            self.ran_control_socket.shutdown(socket.SHUT_RDWR)
-            self.ran_control_socket.close()
-        except:
-            pass
+        # Close sockets (UDP sockets don't need shutdown)
+        sockets_to_close = [
+            self.app_socket,
+            self.ran_metrics_socket,
+            self.ran_control_socket
+        ]
+        
+        for sock in sockets_to_close:
+            if sock:
+                try:
+                    # Only TCP sockets need shutdown, UDP can be closed directly
+                    if sock == self.app_socket:  # TCP socket
+                        sock.shutdown(socket.SHUT_RDWR)
+                    sock.close()
+                except:
+                    pass
 
     def _initialize_ue_priority(self, rnti: str):
         """
@@ -509,68 +528,59 @@ class TuttiController:
                 self.request_prb_allocations[rnti][earliest_req_id] = 0
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
 
-    def _handle_prb_metrics(self, values):
+    def _handle_prb_metrics(self, rnti, prbs, slot):
         """
         Handle PRB allocation metrics.
         """
-        # Keep RNTI as string
-        rnti = values["RNTI"][-4:]  # Just take last 4 chars
-        ue_idx = values["UE_IDX"]
-        slot = int(values["SLOT"])
-        prbs = int(values["PRBs"])
-
-        # Update UE_IDX <-> RNTI mapping
-        self.ue_idx_to_rnti[ue_idx] = rnti
-        self.rnti_to_ue_idx[rnti] = ue_idx
-
+        # Convert RNTI to string for compatibility
+        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
+        
         # Store basic metrics
-        self.current_metrics[rnti] = {
-            "UE_IDX": ue_idx,
+        self.current_metrics[rnti_str] = {
             "PRBs": prbs,
             "SLOT": slot,
         }
 
         # Update latest PRB allocation and slot
-        self.ue_prb_status[rnti] = (slot, prbs)
+        self.ue_prb_status[rnti_str] = (slot, prbs)
         self.log_file.write(
-            f"PRB received from RNTI=0x{rnti}, slot={slot}, prbs={prbs} at"
+            f"PRB received from RNTI=0x{rnti_str}, slot={slot}, prbs={prbs} at"
             f" {time.time()}\n"
         )
         self.log_file.flush()
 
         # Update PRB history
-        self._update_prb_history(rnti, slot, prbs)
+        self._update_prb_history(rnti_str, slot, prbs)
 
-    def _handle_sr_metrics(self, values):
+    def _handle_sr_metrics(self, rnti, slot):
         """
         Handle SR indication metrics.
         """
-        rnti = values["RNTI"][-4:]  # Just take last 4 chars
-        slot = int(values["SLOT"])
+        # Convert RNTI to string for compatibility
+        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
+        
         self.log_file.write(
-            f"SR received from RNTI=0x{rnti}, slot={slot} at {time.time()}\n"
+            f"SR received from RNTI=0x{rnti_str}, slot={slot} at {time.time()}\n"
         )
         self.log_file.flush()
 
-    def _handle_bsr_metrics(self, values):
+    def _handle_bsr_metrics(self, rnti, bytes_val, slot):
         """
         Handle BSR metrics.
         """
-        rnti = values["RNTI"][-4:]  # Just take last 4 chars
-        ue_idx = values["UE_IDX"]
-        bytes = int(values["BYTES"])
-        slot = int(values["SLOT"])
-
+        # Convert RNTI to string for compatibility
+        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
+        
         self.log_file.write(
-            f"bsr received from RNTI=0x{rnti}, slot={slot}, bytes={bytes} at"
+            f"bsr received from RNTI=0x{rnti_str}, slot={slot}, bytes={bytes_val} at"
             f" {time.time()}\n"
         )
         self.log_file.flush()
 
-        if rnti not in self.current_metrics:
-            self.current_metrics[rnti] = {}
-        self.current_metrics[rnti].update(
-            {"UE_IDX": ue_idx, "BSR_BYTES": bytes, "BSR_SLOT": slot}
+        if rnti_str not in self.current_metrics:
+            self.current_metrics[rnti_str] = {}
+        self.current_metrics[rnti_str].update(
+            {"BSR_BYTES": bytes_val, "BSR_SLOT": slot}
         )
 
     def __del__(self):
