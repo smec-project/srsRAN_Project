@@ -144,7 +144,7 @@ class TuttiController:
                     self.request_start_times[rnti_str] = {}
                     
                     self.log_file.write(
-                        f"Auto-registered UE - RNTI: {rnti_str}, SLO: {slo_ms}ms, Size: {request_size} bytes\n"
+                        f"Auto-registered UE - RNTI: {rnti_str}, SLO: {slo_ms}ms, Size: {request_size} bytes at {time.time()}\n"
                     )
                     self.log_file.flush()
                 
@@ -170,7 +170,7 @@ class TuttiController:
                     start_time = self.request_start_times[rnti_str][request_index]
                     elapsed_time_ms = (time.time() - start_time) * 1000
                     self.log_file.write(
-                        f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms\n"
+                        f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n"
                     )
                     self.log_file.flush()
                     del self.request_start_times[rnti_str][request_index]
@@ -183,6 +183,11 @@ class TuttiController:
                     completed_size = self.ue_pending_requests[rnti_str][request_index]
                     self.ue_resource_needs[rnti_str] -= completed_size
                     del self.ue_pending_requests[rnti_str][request_index]
+                
+                # Reset priority immediately when request completes
+                self.reset_priority(rnti_str)
+                self.log_file.write(f"Priority reset for RNTI {rnti_str} after request {request_index} completion\n")
+                self.log_file.flush()
                 
             else:
                 self.log_file.write(f"Invalid start_or_end value: {start_or_end}\n")
@@ -451,6 +456,7 @@ class TuttiController:
                     requests = self.request_start_times[rnti]
                     if not requests:  # No requests for this UE
                         self.reset_priority(rnti)
+                        self.log_file.write(f"No requests for RNTI {rnti}, resetting priority\n")
                         continue
                         
                     incentive_threshold = latency_req / 2
