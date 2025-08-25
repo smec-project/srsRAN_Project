@@ -15,14 +15,14 @@ class TuttiController:
         ran_control_ip: str = "127.0.0.1",
         ran_control_port: int = 5555,  # Port to send priority updates
     ):
-        # Application server setup
-        self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Application server setup (UDP)
+        self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # Enable address/port reuse
         self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.app_socket.bind(("0.0.0.0", app_port))
-        self.app_socket.listen(5)
-        self.app_connections: Dict[str, socket.socket] = {}
+        # UDP doesn't need listen() or connection tracking
+        self.app_port = app_port
 
         # RAN metrics connection setup (UDP)
         self.ran_metrics_socket = socket.socket(
@@ -126,172 +126,122 @@ class TuttiController:
 
         # Start threads for different functionalities
         threading.Thread(
-            target=self._handle_app_connections, daemon=True
+            target=self._handle_app_messages, daemon=True
         ).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
 
         return True
 
-    def _handle_app_connections(self):
+    def _handle_app_messages(self):
         """
-        Handle incoming application connections and messages.
+        Handle incoming UDP application messages.
+        Message format: 5 integers (rnti, request_index, request_size, slo_ms, start_or_end)
         """
         while self.running:
             try:
-                conn, addr = self.app_socket.accept()
-                self.log_file.write(f"New application connected from {addr}\n")
-                self.log_file.flush()
-                self.app_connections[addr[0]] = conn
-                threading.Thread(
-                    target=self._handle_app_messages,
-                    args=(conn, addr),
-                    daemon=True,
-                ).start()
-            except Exception as e:
+                data, addr = self.app_socket.recvfrom(1024)
+                if not data:
+                    continue
+                
+                # Expect 20 bytes (5 x 32-bit integers)
+                if len(data) != 20:
+                    self.log_file.write(f"Invalid message size: {len(data)} bytes, expected 20\n")
+                    self.log_file.flush()
+                    continue
+                
+                # Unpack: rnti, request_index, request_size, slo_ms, start_or_end
+                rnti, request_index, request_size, slo_ms, start_or_end = struct.unpack('IIIII', data)
+                
+                # Convert RNTI to string for compatibility with existing code
+                rnti_str = f"{rnti:04x}"
+                
                 self.log_file.write(
-                    f"Error accepting application connection: {e}\n"
+                    f"UDP message from {addr}: RNTI=0x{rnti_str}, req_idx={request_index}, "
+                    f"size={request_size}, slo={slo_ms}ms, start_end={start_or_end}\n"
                 )
                 self.log_file.flush()
+                
+                # Process the message
+                self._process_udp_app_message(rnti_str, request_index, request_size, slo_ms, start_or_end)
+                
+            except Exception as e:
+                self.log_file.write(f"Error receiving UDP application message: {e}\n")
+                self.log_file.flush()
 
-    def _handle_app_messages(self, conn: socket.socket, addr):
+    def _process_udp_app_message(self, rnti_str: str, request_index: int, request_size: int, slo_ms: int, start_or_end: int):
         """
-        Handle messages from a specific application connection.
+        Process UDP application message.
+        
+        Args:
+            rnti_str: RNTI as hex string
+            request_index: Request sequence number
+            request_size: Request size in bytes  
+            slo_ms: SLO latency requirement in milliseconds
+            start_or_end: 0 for start, 1 for end
         """
         try:
-            # First message should be app registration with app_id
-            data = conn.recv(1024)
-            if not data:
-                return
-
-            app_id = data.decode("utf-8").strip()
-            self.app_connections[app_id] = conn
-            self.log_file.write(
-                f"Application {app_id} registered from {addr}\n"
-            )
-            self.log_file.flush()
-
-            while self.running:
-                try:
-                    data = conn.recv(1024)
-                    if not data:
-                        break
-
-                    message = data.decode("utf-8").strip()
-                    msg_parts = message.split("|")
-                    msg_type = msg_parts[0]
-
-                    if msg_type == "NEW_UE":
-                        # Format: "NEW_UE|RNTI|UE_IDX|LATENCY_REQ|REQUEST_SIZE"
-                        _, rnti, ue_idx, latency_req, request_size = msg_parts
-                        # Store RNTI as string
-                        self.ue_info[rnti] = {
-                            "app_id": app_id,
-                            "ue_idx": ue_idx,
-                            "latency_req": float(latency_req),
-                            "request_size": int(request_size),
-                        }
-                        self.request_sequences[rnti] = []
-                        self.log_file.write(
-                            f"New UE registered - RNTI: {rnti}, UE_IDX:"
-                            f" {ue_idx}, Latency Req: {latency_req}ms, Size:"
-                            f" {request_size} bytes\n"
-                        )
-                        self.log_file.flush()
-                        # Initialize resource tracking for new UE
-                        self.ue_resource_needs[rnti] = 0
-                        self.ue_pending_requests[rnti] = {}
-                        self.request_start_times[rnti] = {}
-
-                    elif msg_type == "Start":
-                        # Format: "Start|rnti|seq_number"
-                        _, rnti, seq_num = msg_parts
-                        current_time = time.time()
-                        self.log_file.write(
-                            f"Request {seq_num} from RNTI {rnti} start at"
-                            f" {current_time}\n"
-                        )
-                        self.log_file.flush()
-
-                    elif msg_type == "REQUEST":
-                        # Format: "REQUEST|RNTI|SEQ_NUM"
-                        _, rnti, seq_num = msg_parts
-                        seq_num = int(seq_num)
-
-                        if rnti in self.ue_info:
-                            # Calculate request size in bytes
-                            request_size = self.ue_info[rnti]["request_size"]
-
-                            # Update resource needs and pending requests
-                            self.ue_resource_needs[rnti] += request_size
-                            self.ue_pending_requests[rnti][
-                                seq_num
-                            ] = request_size
-
-                            # Store request start time
-                            if rnti not in self.request_start_times:
-                                self.request_start_times[rnti] = {}
-                            self.request_start_times[rnti][
-                                seq_num
-                            ] = time.time()
-                        else:
-                            self.log_file.write(
-                                f"Warning: Request for unknown RNTI {rnti}\n"
-                            )
-                            self.log_file.flush()
-
-                    elif msg_type == "DONE":
-                        # Format: "DONE|RNTI|SEQ_NUM"
-                        _, rnti, seq_num = msg_parts
-                        seq_num = int(seq_num)
-
-                        # Calculate final processing time
-                        if (
-                            rnti in self.request_start_times
-                            and seq_num in self.request_start_times[rnti]
-                        ):
-                            start_time = self.request_start_times[rnti][seq_num]
-                            elapsed_time_ms = (
-                                time.time() - start_time
-                            ) * 1000  # Convert to ms
-                            self.log_file.write(
-                                f"Request {seq_num} from RNTI {rnti} completed"
-                                f" in {elapsed_time_ms:.2f}ms at"
-                                f" {time.time()}\n"
-                            )
-                            self.log_file.flush()
-                            del self.request_start_times[rnti][seq_num]
-
-                        # Handle resource tracking
-                        if (
-                            rnti in self.ue_pending_requests
-                            and seq_num in self.ue_pending_requests[rnti]
-                        ):
-                            completed_size = self.ue_pending_requests[rnti][
-                                seq_num
-                            ]
-                            self.ue_resource_needs[rnti] -= completed_size
-                            del self.ue_pending_requests[rnti][seq_num]
-
-                        if (
-                            rnti not in self.request_start_times
-                            and rnti not in self.ue_pending_requests
-                        ):
-                            self.log_file.write(
-                                f"Warning: Completion for unknown RNTI {rnti}\n"
-                            )
-                            self.log_file.flush()
-
-                except Exception as e:
+            if start_or_end == 0:  # Request START
+                # Auto-register UE if not exists
+                if rnti_str not in self.ue_info:
+                    self.ue_info[rnti_str] = {
+                        "app_id": "udp_app",
+                        "ue_idx": "auto", 
+                        "latency_req": float(slo_ms),
+                        "request_size": request_size,
+                    }
+                    self.request_sequences[rnti_str] = []
+                    self.ue_resource_needs[rnti_str] = 0
+                    self.ue_pending_requests[rnti_str] = {}
+                    self.request_start_times[rnti_str] = {}
+                    
                     self.log_file.write(
-                        f"Error processing application message: {e}\n"
+                        f"Auto-registered UE - RNTI: {rnti_str}, SLO: {slo_ms}ms, Size: {request_size} bytes\n"
                     )
                     self.log_file.flush()
-                    break
-
-        finally:
-            if app_id in self.app_connections:
-                del self.app_connections[app_id]
-            conn.close()
+                
+                # Start new request
+                self.ue_resource_needs[rnti_str] += request_size
+                self.ue_pending_requests[rnti_str][request_index] = request_size
+                
+                if rnti_str not in self.request_start_times:
+                    self.request_start_times[rnti_str] = {}
+                self.request_start_times[rnti_str][request_index] = time.time()
+                
+                self.log_file.write(
+                    f"Request {request_index} from RNTI {rnti_str} started at {time.time()}\n"
+                )
+                self.log_file.flush()
+                
+            elif start_or_end == 1:  # Request END
+                # Calculate completion time
+                if (
+                    rnti_str in self.request_start_times
+                    and request_index in self.request_start_times[rnti_str]
+                ):
+                    start_time = self.request_start_times[rnti_str][request_index]
+                    elapsed_time_ms = (time.time() - start_time) * 1000
+                    self.log_file.write(
+                        f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n"
+                    )
+                    self.log_file.flush()
+                    del self.request_start_times[rnti_str][request_index]
+                
+                # Handle resource cleanup
+                if (
+                    rnti_str in self.ue_pending_requests
+                    and request_index in self.ue_pending_requests[rnti_str]
+                ):
+                    completed_size = self.ue_pending_requests[rnti_str][request_index]
+                    self.ue_resource_needs[rnti_str] -= completed_size
+                    del self.ue_pending_requests[rnti_str][request_index]
+                
+            else:
+                self.log_file.write(f"Invalid start_or_end value: {start_or_end}\n")
+                self.log_file.flush()
+                
+        except Exception as e:
+            self.log_file.write(f"Error processing UDP app message: {e}\n")
+            self.log_file.flush()
 
     def _handle_ran_metrics(self):
         """
@@ -381,15 +331,7 @@ class TuttiController:
         """
         self.running = False
 
-        # Close all application connections
-        for conn in self.app_connections.values():
-            try:
-                conn.shutdown(socket.SHUT_RDWR)
-                conn.close()
-            except:
-                pass
-
-        # Close server sockets
+        # Close server sockets (UDP app doesn't maintain connections)
         # Close sockets (UDP sockets don't need shutdown)
         sockets_to_close = [
             self.app_socket,
