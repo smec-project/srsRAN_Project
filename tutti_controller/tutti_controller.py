@@ -14,24 +14,24 @@ class TuttiController:
         ran_control_ip: str = "127.0.0.1",
         ran_control_port: int = 5555,  # Port to send priority updates
     ):
-        # Application server setup
-        self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Application server setup (UDP)
+        self.app_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # Enable address/port reuse
         self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.app_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.app_socket.bind(("0.0.0.0", app_port))
-        self.app_socket.listen(5)
-        self.app_connections: Dict[str, socket.socket] = {}
+        # UDP doesn't need listen() or connection tracking
+        self.app_port = app_port
         
-        # RAN metrics connection setup
-        self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # RAN metrics connection setup (UDP)
+        self.ran_metrics_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.ran_metrics_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.ran_metrics_ip = ran_metrics_ip
         self.ran_metrics_port = ran_metrics_port
         
-        # RAN control connection setup
-        self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # RAN control connection setup (UDP)
+        self.ran_control_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.ran_control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.ran_control_ip = ran_control_ip
@@ -76,180 +76,215 @@ class TuttiController:
         """Start the controller and all its connections"""
         self.running = True
         
-        # Connect to RAN services
+        # Bind RAN metrics socket (UDP control socket doesn't need connect)
         try:
-            self.ran_metrics_socket.connect((self.ran_metrics_ip, self.ran_metrics_port))
-            self.ran_control_socket.connect((self.ran_control_ip, self.ran_control_port))
+            self.ran_metrics_socket.bind((self.ran_metrics_ip, self.ran_metrics_port))
+            self.log_file.write(f"RAN metrics UDP server listening on {self.ran_metrics_ip}:{self.ran_metrics_port}\n")
+            self.log_file.write(f"RAN control UDP sender initialized (target: {self.ran_control_ip}:{self.ran_control_port})\n")
+            self.log_file.flush()
         except Exception as e:
-            self.log_file.write(f"Failed to connect to RAN services: {e}\n")
+            self.log_file.write(f"Failed to setup RAN services: {e}\n")
             self.log_file.flush()
             return False
 
         # Start threads for different functionalities
-        threading.Thread(target=self._handle_app_connections, daemon=True).start()
+        threading.Thread(target=self._handle_app_messages, daemon=True).start()
         threading.Thread(target=self._handle_ran_metrics, daemon=True).start()
         
         return True
 
-    def _handle_app_connections(self):
-        """Handle incoming application connections and messages"""
+    def _handle_app_messages(self):
+        """Handle incoming UDP application messages"""
         while self.running:
             try:
-                conn, addr = self.app_socket.accept()
-                self.log_file.write(f"New application connected from {addr}\n")
-                self.log_file.flush()
-                self.app_connections[addr[0]] = conn
-                threading.Thread(
-                    target=self._handle_app_messages,
-                    args=(conn, addr),
-                    daemon=True
-                ).start()
-            except Exception as e:
-                self.log_file.write(f"Error accepting application connection: {e}\n")
-                self.log_file.flush()
-
-    def _handle_app_messages(self, conn: socket.socket, addr):
-        """Handle messages from a specific application connection"""
-        try:
-            # First message should be app registration with app_id
-            data = conn.recv(1024)
-            if not data:
-                return
-            
-            app_id = data.decode('utf-8').strip()
-            self.app_connections[app_id] = conn
-            self.log_file.write(f"Application {app_id} registered from {addr}\n")
-            self.log_file.flush()
-            
-            while self.running:
-                try:
-                    data = conn.recv(1024)
-                    if not data:
-                        break
-                    
-                    message = data.decode('utf-8').strip()
-                    msg_parts = message.split('|')
-                    msg_type = msg_parts[0]
-
-                    if msg_type == "NEW_UE":
-                        # Format: "NEW_UE|RNTI|UE_IDX|LATENCY_REQ|REQUEST_SIZE"
-                        _, rnti, ue_idx, latency_req, request_size = msg_parts
-                        # Store RNTI as string
-                        self.ue_info[rnti] = {
-                            'app_id': app_id,
-                            'ue_idx': ue_idx,
-                            'latency_req': float(latency_req),
-                            'request_size': int(request_size)
-                        }
-                        self.request_sequences[rnti] = []
-                        self.log_file.write(f"New UE registered - RNTI: {rnti}, UE_IDX: {ue_idx}, "
-                              f"Latency Req: {latency_req}ms, Size: {request_size} bytes\n")
-                        self.log_file.flush()
-                        # Initialize resource tracking for new UE
-                        self.ue_resource_needs[rnti] = 0
-                        self.ue_pending_requests[rnti] = {}
-                        self.request_start_times[rnti] = {}
-
-                    elif msg_type == "REQUEST":
-                        # Format: "REQUEST|RNTI|SEQ_NUM"
-                        _, rnti, seq_num = msg_parts
-                        seq_num = int(seq_num)
-                        
-                        if rnti in self.ue_info:
-                            # Calculate request size in bytes
-                            request_size = self.ue_info[rnti]['request_size']
-                            
-                            # Update resource needs and pending requests
-                            self.ue_resource_needs[rnti] += request_size
-                            self.ue_pending_requests[rnti][seq_num] = request_size
-
-                            # Store request start time
-                            if rnti not in self.request_start_times:
-                                self.request_start_times[rnti] = {}
-                            self.request_start_times[rnti][seq_num] = time.time()
-                        else:
-                            self.log_file.write(f"Warning: Request for unknown RNTI {rnti}\n")
-                            self.log_file.flush()
-
-                    elif msg_type == "DONE":
-                        # Format: "DONE|RNTI|SEQ_NUM"
-                        _, rnti, seq_num = msg_parts
-                        seq_num = int(seq_num)
-                        
-                        # Calculate final processing time
-                        if rnti in self.request_start_times and seq_num in self.request_start_times[rnti]:
-                            start_time = self.request_start_times[rnti][seq_num]
-                            elapsed_time_ms = (time.time() - start_time) * 1000  # Convert to ms
-                            self.log_file.write(f"Request {seq_num} from RNTI {rnti} completed in {elapsed_time_ms:.2f}ms\n")
-                            self.log_file.flush()
-                            del self.request_start_times[rnti][seq_num]
-                        
-                        # Handle resource tracking
-                        if rnti in self.ue_pending_requests and seq_num in self.ue_pending_requests[rnti]:
-                            completed_size = self.ue_pending_requests[rnti][seq_num]
-                            self.ue_resource_needs[rnti] -= completed_size
-                            del self.ue_pending_requests[rnti][seq_num]
-                        
-                        if rnti not in self.request_start_times and rnti not in self.ue_pending_requests:
-                            self.log_file.write(f"Warning: Completion for unknown RNTI {rnti}\n")
-                            self.log_file.flush()
-
-                except Exception as e:
-                    self.log_file.write(f"Error processing application message: {e}\n")
-                    self.log_file.flush()
-                    break
-                    
-        finally:
-            if app_id in self.app_connections:
-                del self.app_connections[app_id]
-            conn.close()
-
-    def _handle_ran_metrics(self):
-        """Receive and process RAN metrics"""
-        while self.running:
-            try:
-                data = self.ran_metrics_socket.recv(1024).decode('utf-8')
+                data, addr = self.app_socket.recvfrom(1024)
                 if not data:
                     continue
                 
-                # Parse the metrics string
-                metrics = {}
-                for line in data.strip().split('\n'):
-                    values = dict(item.split('=') for item in line.split(','))
-                    # Keep RNTI as string
-                    rnti = values['RNTI'][-4:]  # Just take last 4 chars
-                    slot = int(values['SLOT'])
-                    prbs = int(values['PRBs'])
-                    
-                    # Store basic metrics
-                    metrics[rnti] = {
-                        'UE_IDX': values['UE_IDX'],
-                        'PRBs': prbs,
-                        'SLOT': slot
+                # Expect 20 bytes (5 x 32-bit integers)
+                if len(data) != 20:
+                    self.log_file.write(f"Invalid message size: {len(data)} bytes, expected 20\n")
+                    self.log_file.flush()
+                    continue
+                
+                # Unpack: rnti, request_index, request_size, slo_ms, start_or_end
+                rnti, request_index, request_size, slo_ms, start_or_end = struct.unpack('IIIII', data)
+                
+                # Convert RNTI to string for compatibility with existing code
+                rnti_str = f"{rnti:04x}"
+                
+                self.log_file.write(
+                    f"UDP message from {addr}: RNTI=0x{rnti_str}, req_idx={request_index}, "
+                    f"size={request_size}, slo={slo_ms}ms, start_end={start_or_end}\n"
+                )
+                self.log_file.flush()
+                
+                # Process the message
+                self._process_udp_app_message(rnti_str, request_index, request_size, slo_ms, start_or_end)
+                
+            except Exception as e:
+                self.log_file.write(f"Error receiving UDP application message: {e}\n")
+                self.log_file.flush()
+
+    def _process_udp_app_message(self, rnti_str: str, request_index: int, request_size: int, slo_ms: int, start_or_end: int):
+        """Process UDP application message"""
+        try:
+            if start_or_end == 0:  # Request START
+                # Auto-register UE if not exists
+                if rnti_str not in self.ue_info:
+                    self.ue_info[rnti_str] = {
+                        "app_id": "udp_app",
+                        "ue_idx": "auto", 
+                        "latency_req": float(slo_ms),
+                        "request_size": request_size,
                     }
+                    self.request_sequences[rnti_str] = []
+                    self.ue_resource_needs[rnti_str] = 0
+                    self.ue_pending_requests[rnti_str] = {}
+                    self.request_start_times[rnti_str] = {}
                     
-                    # Update latest PRB allocation and slot
-                    self.ue_prb_status[rnti] = (slot, prbs)
+                    self.log_file.write(
+                        f"Auto-registered UE - RNTI: {rnti_str}, SLO: {slo_ms}ms, Size: {request_size} bytes\n"
+                    )
+                    self.log_file.flush()
                 
-                self.current_metrics = metrics
+                # Start new request
+                self.ue_resource_needs[rnti_str] += request_size
+                self.ue_pending_requests[rnti_str][request_index] = request_size
                 
-                # Update PRB history when receiving new metrics
-                for rnti, metrics in self.current_metrics.items():
-                    if 'SLOT' in metrics and 'PRBs' in metrics:
-                        self._update_prb_history(rnti, metrics['SLOT'], metrics['PRBs'])
+                if rnti_str not in self.request_start_times:
+                    self.request_start_times[rnti_str] = {}
+                self.request_start_times[rnti_str][request_index] = time.time()
                 
+                self.log_file.write(
+                    f"Request {request_index} from RNTI {rnti_str} started\n"
+                )
+                self.log_file.flush()
+                
+            elif start_or_end == 1:  # Request END
+                # Calculate completion time
+                if (
+                    rnti_str in self.request_start_times
+                    and request_index in self.request_start_times[rnti_str]
+                ):
+                    start_time = self.request_start_times[rnti_str][request_index]
+                    elapsed_time_ms = (time.time() - start_time) * 1000
+                    self.log_file.write(
+                        f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms\n"
+                    )
+                    self.log_file.flush()
+                    del self.request_start_times[rnti_str][request_index]
+                
+                # Handle resource cleanup
+                if (
+                    rnti_str in self.ue_pending_requests
+                    and request_index in self.ue_pending_requests[rnti_str]
+                ):
+                    completed_size = self.ue_pending_requests[rnti_str][request_index]
+                    self.ue_resource_needs[rnti_str] -= completed_size
+                    del self.ue_pending_requests[rnti_str][request_index]
+                
+            else:
+                self.log_file.write(f"Invalid start_or_end value: {start_or_end}\n")
+                self.log_file.flush()
+                
+        except Exception as e:
+            self.log_file.write(f"Error processing UDP app message: {e}\n")
+            self.log_file.flush()
+
+    def _handle_ran_metrics(self):
+        """Receive and process RAN metrics (UDP binary format)"""
+        while self.running:
+            try:
+                data, _ = self.ran_metrics_socket.recvfrom(1024)
+                if not data:
+                    continue
+
+                # Process binary messages (16 bytes each: 4 x 32-bit integers)
+                message_size = 16
+                offset = 0
+                
+                while offset + message_size <= len(data):
+                    # Unpack: msg_type, rnti, field1, field2
+                    msg_type, rnti, field1, field2 = struct.unpack('IIII', data[offset:offset + message_size])
+                    
+                    if msg_type == 0:  # PRB
+                        self._handle_prb_metrics(rnti, field1, field2)
+                    elif msg_type == 1:  # SR
+                        self._handle_sr_metrics(rnti, field1)
+                    elif msg_type == 2:  # BSR
+                        self._handle_bsr_metrics(rnti, field1, field2)
+                    else:
+                        self.log_file.write(f"Unknown metrics type: {msg_type}\n")
+                        self.log_file.flush()
+                    
+                    offset += message_size
+
             except Exception as e:
                 self.log_file.write(f"Error receiving RAN metrics: {e}\n")
                 self.log_file.flush()
 
+    def _handle_prb_metrics(self, rnti, prbs, slot):
+        """Handle PRB allocation metrics"""
+        # Convert RNTI to string for compatibility
+        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
+        
+        # Store basic metrics
+        self.current_metrics[rnti_str] = {
+            "PRBs": prbs,
+            "SLOT": slot,
+        }
+
+        # Update latest PRB allocation and slot
+        self.ue_prb_status[rnti_str] = (slot, prbs)
+        self.log_file.write(
+            f"PRB received from RNTI=0x{rnti_str}, slot={slot}, prbs={prbs}\n"
+        )
+        self.log_file.flush()
+
+        # Update PRB history
+        self._update_prb_history(rnti_str, slot, prbs)
+
+    def _handle_sr_metrics(self, rnti, slot):
+        """Handle SR indication metrics"""
+        # Convert RNTI to string for compatibility
+        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
+        
+        self.log_file.write(
+            f"SR received from RNTI=0x{rnti_str}, slot={slot}\n"
+        )
+        self.log_file.flush()
+
+    def _handle_bsr_metrics(self, rnti, bytes_val, slot):
+        """Handle BSR metrics"""
+        # Convert RNTI to string for compatibility
+        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
+        
+        self.log_file.write(
+            f"BSR received from RNTI=0x{rnti_str}, slot={slot}, bytes={bytes_val}\n"
+        )
+        self.log_file.flush()
+
+        if rnti_str not in self.current_metrics:
+            self.current_metrics[rnti_str] = {}
+        self.current_metrics[rnti_str].update(
+            {"BSR_BYTES": bytes_val, "BSR_SLOT": slot}
+        )
+
     def set_priority(self, rnti: str, priority: float):
-        """Send priority update to RAN"""
+        """Send priority update to RAN via UDP"""
         try:
-            # Format RNTI string and pack message in the correct format
-            rnti_str = f"{rnti:<4}".encode('ascii')  # Left align, space pad to 4 chars
-            msg = struct.pack('=5sdb', rnti_str, priority, False)
+            # Convert string RNTI to integer for binary format compatibility
+            rnti_int = int(rnti, 16)  # Convert hex string to int
             
-            self.ran_control_socket.send(msg)
+            # Pack message: RNTI as int, priority as double, reset as bool
+            msg = struct.pack("=IdB", rnti_int, priority, False)
+
+            # Send via UDP to target address
+            self.ran_control_socket.sendto(
+                msg,
+                (self.ran_control_ip, self.ran_control_port)
+            )
             return True
         except Exception as e:
             self.log_file.write(f"Failed to send priority update: {e}\n")
@@ -257,16 +292,23 @@ class TuttiController:
             return False
 
     def reset_priority(self, rnti: str):
-        """Reset priority for a specific RNTI"""
+        """Reset priority for a specific RNTI via UDP"""
         try:
             # Reset priority state
             if rnti in self.ue_priorities:
                 self.ue_priorities[rnti] = 0.0
+
+            # Convert string RNTI to integer for binary format compatibility
+            rnti_int = int(rnti, 16)  # Convert hex string to int
             
-            # Reset in scheduler
-            rnti_str = f"{rnti:<4}".encode('ascii')
-            msg = struct.pack('=5sdb', rnti_str, 0.0, True)
-            self.ran_control_socket.send(msg)
+            # Pack reset message: RNTI as int, 0.0 priority, reset=True
+            msg = struct.pack("=IdB", rnti_int, 0.0, True)
+            
+            # Send via UDP to target address
+            self.ran_control_socket.sendto(
+                msg,
+                (self.ran_control_ip, self.ran_control_port)
+            )
             return True
         except Exception as e:
             self.log_file.write(f"Failed to reset priority: {e}\n")
@@ -276,33 +318,20 @@ class TuttiController:
     def stop(self):
         """Stop the controller and clean up connections"""
         self.running = False
+
+        # Close UDP sockets (UDP sockets don't need shutdown)
+        sockets_to_close = [
+            self.app_socket,
+            self.ran_metrics_socket,
+            self.ran_control_socket
+        ]
         
-        # Close all application connections
-        for conn in self.app_connections.values():
-            try:
-                conn.shutdown(socket.SHUT_RDWR)
-                conn.close()
-            except:
-                pass
-        
-        # Close server sockets
-        try:
-            self.app_socket.shutdown(socket.SHUT_RDWR)
-            self.app_socket.close()
-        except:
-            pass
-        
-        try:
-            self.ran_metrics_socket.shutdown(socket.SHUT_RDWR)
-            self.ran_metrics_socket.close()
-        except:
-            pass
-        
-        try:
-            self.ran_control_socket.shutdown(socket.SHUT_RDWR)
-            self.ran_control_socket.close()
-        except:
-            pass
+        for sock in sockets_to_close:
+            if sock:
+                try:
+                    sock.close()
+                except:
+                    pass
 
     def _initialize_ue_priority(self, rnti: str):
         """Initialize priority for a new UE"""
