@@ -53,6 +53,7 @@ class TuttiController:
         
         # Change request_timers to store start timestamps
         self.request_start_times: Dict[str, Dict[int, float]] = {}  # RNTI -> {request_id -> start_timestamp}
+        self.last_completed_request_id: Dict[str, int] = {}  # RNTI -> last completed request ID
         
         # Track UE priority states
         self.ue_priorities: Dict[str, float] = {}  # RNTI -> current_priority
@@ -115,7 +116,7 @@ class TuttiController:
                 
                 self.log_file.write(
                     f"UDP message from {addr}: RNTI=0x{rnti_str}, req_idx={request_index}, "
-                    f"size={request_size}, slo={slo_ms}ms, start_end={start_or_end}\n"
+                    f"size={request_size}, slo={slo_ms}ms, start_end={start_or_end} at {time.time()}\n"
                 )
                 self.log_file.flush()
                 
@@ -156,9 +157,6 @@ class TuttiController:
                     self.request_start_times[rnti_str] = {}
                 self.request_start_times[rnti_str][request_index] = time.time()
                 
-                self.log_file.write(
-                    f"Request {request_index} from RNTI {rnti_str} started\n"
-                )
                 self.log_file.flush()
                 
             elif start_or_end == 1:  # Request END
@@ -173,6 +171,15 @@ class TuttiController:
                         f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n"
                     )
                     self.log_file.flush()
+                    
+                    # Track the highest completed request ID
+                    if rnti_str not in self.last_completed_request_id:
+                        self.last_completed_request_id[rnti_str] = request_index
+                    else:
+                        self.last_completed_request_id[rnti_str] = max(
+                            self.last_completed_request_id[rnti_str], request_index
+                        )
+                    
                     del self.request_start_times[rnti_str][request_index]
                 
                 # Handle resource cleanup
@@ -183,11 +190,6 @@ class TuttiController:
                     completed_size = self.ue_pending_requests[rnti_str][request_index]
                     self.ue_resource_needs[rnti_str] -= completed_size
                     del self.ue_pending_requests[rnti_str][request_index]
-                
-                # Reset priority immediately when request completes
-                self.reset_priority(rnti_str)
-                self.log_file.write(f"Priority reset for RNTI {rnti_str} after request {request_index} completion\n")
-                self.log_file.flush()
                 
             else:
                 self.log_file.write(f"Invalid start_or_end value: {start_or_end}\n")
@@ -461,17 +463,30 @@ class TuttiController:
                         
                     incentive_threshold = latency_req / 2
                     
-                    # Find earliest request and calculate its elapsed time
-                    earliest_req_id = min(requests.items(), key=lambda x: x[1])[0]
-                    elapsed_time_ms = (current_time - requests[earliest_req_id]) * 1000
+                    # Find earliest request that hasn't been completed yet
+                    last_completed = self.last_completed_request_id.get(rnti, -1)
+                    valid_requests = {req_id: timestamp for req_id, timestamp in requests.items() 
+                                    if req_id > last_completed}
+                    
+                    if not valid_requests:
+                        # All current requests have been completed, reset priority
+                        self.reset_priority(rnti)
+                        self.log_file.write(f"All requests for RNTI {rnti} completed, resetting priority\n")
+                        continue
+                    
+                    earliest_req_id = min(valid_requests.items(), key=lambda x: x[1])[0]
+                    elapsed_time_ms = (current_time - valid_requests[earliest_req_id]) * 1000
                     
                     # Calculate priority based on current state
                     if elapsed_time_ms < incentive_threshold:
-                        priority = self._calculate_incentive_priority(rnti)
+                        # priority = self._calculate_incentive_priority(rnti)
+                        priority = 0
                     elif elapsed_time_ms < latency_req:
                         priority = self._calculate_accelerate_priority(rnti)
                     else:
                         priority = 10000
+                        self.log_file.write(f"rnti: {rnti} latency_req: {latency_req} elapsed_time_ms: {elapsed_time_ms} priority: {priority}\n")
+                        self.log_file.flush()
                     
                     # Update priority state and scheduler
                     self.ue_priorities[rnti] = priority
