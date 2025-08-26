@@ -479,7 +479,6 @@ class TuttiController:
                     # Calculate priority based on current state
                     if elapsed_time_ms < incentive_threshold:
                         priority = self._calculate_incentive_priority(rnti)
-                        # priority = 0
                     elif elapsed_time_ms < latency_req:
                         priority = self._calculate_accelerate_priority(rnti)
                     else:
