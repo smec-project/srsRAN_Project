@@ -35,7 +35,7 @@ cell_cfg:
   sched_expert_cfg:
     policy_sched_cfg:
       pf_sched:
-        pf_sched_fairness_coeff: 2.0
+        pf_sched_fairness_coeff: 1.0
   # tdd_ul_dl_cfg:
   #   dl_ul_tx_period: 5    
   #   nof_dl_slots: 3

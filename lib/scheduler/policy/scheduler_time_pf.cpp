@@ -567,7 +567,12 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   // } else {
   //   ul_prio = rate_weight * pf_weight;
   // }
-  ul_prio         = rate_weight * pf_weight + deadline_priority;
+  ul_prio = rate_weight * 0 + pf_weight + deadline_priority;
+  // if (deadline_priority > 0) {
+  //   std::cout << "pf_weight: " << pf_weight << " deadline_priority: " << deadline_priority << std::endl;
+  // } else {
+  //   std::cout << "pf_weight: " << pf_weight << std::endl;
+  // }
   sr_ind_received = u.has_pending_sr();
 }
 
