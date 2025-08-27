@@ -392,7 +392,7 @@ class TuttiController:
             if actual_prbs > 0:
                 current_offset = self.ue_priorities[ue_rnti] + max(DEFAULT_PRIORITY_OFFSET, abs(actual_prbs - ue_prb_requirements[ue_rnti][1])/actual_prbs)
             else:
-                current_offset = self.ue_priorities[ue_rnti] + 1
+                current_offset = self.ue_priorities[ue_rnti] + abs(actual_prbs - ue_prb_requirements[ue_rnti][1])
         self.log_file.write(f"incentive {ue_rnti} {actual_prbs} {ue_prb_requirements[ue_rnti][1]} {current_offset}\n")
         self.log_file.flush()  # Ensure immediate write
         return current_offset
