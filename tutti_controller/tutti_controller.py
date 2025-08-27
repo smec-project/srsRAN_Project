@@ -66,12 +66,14 @@ class TuttiController:
         # Track allocated PRBs for each request
         self.request_prb_allocations: Dict[str, Dict[int, int]] = {}  # RNTI -> {request_id -> total_allocated_prbs}
         
+        # Track current slot for batched priority updates
+        self.current_slot = None
+        self.slot_prb_allocations = {}  # Track RNTIs that got PRBs in current slot
+        
         # Open log file first
         self.log_file = open('controller.txt', 'w')
 
-        # Then start priority update thread
-        self.priority_thread = threading.Thread(target=self._update_priorities)
-        self.priority_thread.start()
+        # Priority updates are now event-driven (called from _update_prb_history)
 
     def start(self):
         """Start the controller and all its connections"""
@@ -260,8 +262,30 @@ class TuttiController:
         # )
         # self.log_file.flush()
 
-        # Update PRB history
+        # Check if we moved to a new slot
+        if self.current_slot is not None and slot != self.current_slot:
+            # Process previous slot: update RNTIs that didn't get PRBs to 0
+            for rnti in list(self.request_start_times.keys()):
+                if self.request_start_times[rnti] and rnti not in self.slot_prb_allocations:
+                    self._update_prb_history(rnti, self.current_slot, 0)
+            
+            # Update priorities for all RNTIs with active requests after slot completion
+            for update_rnti in list(self.request_start_times.keys()):
+                if self.request_start_times[update_rnti]:
+                    self._calculate_and_update_priority(update_rnti)
+            
+            # Reset for new slot
+            self.slot_prb_allocations = {}
+        
+        # Update current slot
+        self.current_slot = slot
+        
+        # Update PRB history for the current RNTI
         self._update_prb_history(rnti_str, slot, prbs)
+        
+        # Track which RNTIs got PRBs in this slot
+        if prbs > 0:
+            self.slot_prb_allocations[rnti_str] = prbs
 
     def _handle_sr_metrics(self, rnti, slot):
         """Handle SR indication metrics"""
@@ -359,7 +383,7 @@ class TuttiController:
         """Calculate priority for incentive mode (first half of latency requirement)"""
         # Constants
         BYTES_PER_PRB = 80
-        TTI_DURATION = 2.5  # ms
+        TTI_DURATION = 0.5  # ms
         DEFAULT_PRIORITY_OFFSET = 1.0  # Initial priority offset
         
         # Store calculations for each UE with requests
@@ -444,69 +468,55 @@ class TuttiController:
         self.log_file.flush()
         return priority
 
-    def _update_priorities(self):
-        """Update priorities based on request timers and latency requirements"""
-        self.log_file.write("Priority update thread started\n")
-        self.log_file.flush()
-        while self.running:
-            try:
-                current_time = time.time()
-                for rnti in list(self.request_start_times.keys()):
-                    # Skip if we don't have UE info yet
-                    if rnti not in self.ue_info:
-                        self.log_file.write(f"Waiting for UE info for RNTI {rnti}\n")
-                        continue
-                        
-                    # Initialize priority if not exists
-                    if rnti not in self.ue_priorities:
-                        self._initialize_ue_priority(rnti)
-                    # Skip priority adjustment for requests with latency requirement > 3s
-                    latency_req = self.ue_info[rnti]['latency_req']
-                    if latency_req > 3000:
-                        # self.log_file.write(f"Skip priority adjustment for RNTI {rnti} with latency requirement {latency_req}ms\n")
-                        continue
-                        
-                    requests = self.request_start_times[rnti]
-                    if not requests:  # No requests for this UE
-                        self.reset_priority(rnti)
-                        # self.log_file.write(f"No requests for RNTI {rnti}, resetting priority\n")
-                        continue
-                        
-                    incentive_threshold = latency_req / 2
-                    
-                    # Find earliest request that hasn't been completed yet
-                    last_completed = self.last_completed_request_id.get(rnti, -1)
-                    valid_requests = {req_id: timestamp for req_id, timestamp in requests.items() 
-                                    if req_id > last_completed}
-                    
-                    if not valid_requests:
-                        # All current requests have been completed, reset priority
-                        self.reset_priority(rnti)
-                        # self.log_file.write(f"All requests for RNTI {rnti} completed, resetting priority\n")
-                        continue
-                    
-                    earliest_req_id = min(valid_requests.items(), key=lambda x: x[1])[0]
-                    elapsed_time_ms = (current_time - valid_requests[earliest_req_id]) * 1000
-                    
-                    # Calculate priority based on current state
-                    if elapsed_time_ms < incentive_threshold:
-                        priority = self._calculate_incentive_priority(rnti)
-                    elif elapsed_time_ms < latency_req:
-                        priority = self._calculate_accelerate_priority(rnti)
-                    else:
-                        priority = 10000
-                        self.log_file.write(f"rnti: {rnti} latency_req: {latency_req} elapsed_time_ms: {elapsed_time_ms} priority: {priority}\n")
-                        self.log_file.flush()
-                    
-                    # Update priority state and scheduler
-                    self.ue_priorities[rnti] = priority
-                    self.set_priority(rnti, priority)
-                    
-                time.sleep(0.001)  # 1ms update interval
-                
-            except Exception as e:
-                self.log_file.write(f"Error updating priorities: {e}\n")
-                self.log_file.flush()
+    def _calculate_and_update_priority(self, rnti: str):
+        """Calculate and update priority for a specific UE based on request state"""
+        # Skip if we don't have UE info yet
+        if rnti not in self.ue_info:
+            return
+            
+        # Initialize priority if not exists
+        if rnti not in self.ue_priorities:
+            self._initialize_ue_priority(rnti)
+            
+        # Skip priority adjustment for requests with latency requirement > 3s
+        latency_req = self.ue_info[rnti]['latency_req']
+        if latency_req > 3000:
+            return
+            
+        requests = self.request_start_times[rnti]
+        if not requests:  # No requests for this UE
+            self.reset_priority(rnti)
+            return
+            
+        incentive_threshold = latency_req / 2
+        
+        # Find earliest request that hasn't been completed yet
+        last_completed = self.last_completed_request_id.get(rnti, -1)
+        valid_requests = {req_id: timestamp for req_id, timestamp in requests.items() 
+                        if req_id > last_completed}
+        
+        if not valid_requests:
+            # All current requests have been completed, reset priority
+            self.reset_priority(rnti)
+            return
+        
+        earliest_req_id = min(valid_requests.items(), key=lambda x: x[1])[0]
+        current_time = time.time()
+        elapsed_time_ms = (current_time - valid_requests[earliest_req_id]) * 1000
+        
+        # Calculate priority based on current state
+        if elapsed_time_ms < incentive_threshold:
+            priority = self._calculate_incentive_priority(rnti)
+        elif elapsed_time_ms < latency_req:
+            priority = self._calculate_accelerate_priority(rnti)
+        else:
+            priority = 10000
+            self.log_file.write(f"rnti: {rnti} latency_req: {latency_req} elapsed_time_ms: {elapsed_time_ms} priority: {priority}\n")
+            self.log_file.flush()
+        
+        # Update priority state and scheduler
+        self.ue_priorities[rnti] = priority
+        self.set_priority(rnti, priority)
 
     def _update_prb_history(self, rnti: str, slot: int, prbs: int):
         """Update PRB history and track PRB allocations for earliest active request"""
@@ -548,8 +558,10 @@ class TuttiController:
             if earliest_req_id not in self.request_prb_allocations[rnti]:
                 self.request_prb_allocations[rnti][earliest_req_id] = 0
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
-            self.log_file.write(f"PRB Update - RNTI: {rnti}, earliest_req_id: {earliest_req_id}, prbs_allocated: {self.request_prb_allocations[rnti][earliest_req_id]}, slot: {slot}\n")
-            self.log_file.flush()
+            
+            if prbs > 0:
+                self.log_file.write(f"PRB_event - RNTI: {rnti}, req_id: {earliest_req_id}, prbs: {prbs}, total: {self.request_prb_allocations[rnti][earliest_req_id]}, slot: {slot}\n")
+                self.log_file.flush()
 
     def __del__(self):
         """Ensure sockets are closed when object is destroyed"""
