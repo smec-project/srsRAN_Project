@@ -1,3 +1,4 @@
+from functools import total_ordering
 import socket
 import struct
 import threading
@@ -460,7 +461,10 @@ class TuttiController:
             self.request_prb_allocations[ue_rnti] = {}
         prbs_allocated = self.request_prb_allocations[ue_rnti].get(earliest_req_id, 0)
         
-        remaining_prbs = max(0, total_prbs_needed - prbs_allocated)
+        if total_prbs_needed > prbs_allocated:
+            remaining_prbs = total_prbs_needed - prbs_allocated
+        else:
+            remaining_prbs = 50
         
         # Calculate priority using exponential decay and remaining PRBs
         priority = remaining_prbs * math.exp(-1 * time_to_deadline_s)
@@ -510,7 +514,7 @@ class TuttiController:
         elif elapsed_time_ms < latency_req:
             priority = self._calculate_accelerate_priority(rnti)
         else:
-            priority = 10000
+            priority = 100
             self.log_file.write(f"rnti: {rnti} latency_req: {latency_req} elapsed_time_ms: {elapsed_time_ms} priority: {priority}\n")
             self.log_file.flush()
         
