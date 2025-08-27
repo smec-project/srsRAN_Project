@@ -156,6 +156,10 @@ class TuttiController:
                 if rnti_str not in self.request_start_times:
                     self.request_start_times[rnti_str] = {}
                 self.request_start_times[rnti_str][request_index] = time.time()
+                self.log_file.write(
+                    f"Request {request_index} from RNTI {rnti_str} started at {time.time()}\n"
+                )
+                self.log_file.flush()
                 
             elif start_or_end == 1:  # Request END
                 # Calculate completion time
@@ -163,12 +167,12 @@ class TuttiController:
                     rnti_str in self.request_start_times
                     and request_index in self.request_start_times[rnti_str]
                 ):
-                    # start_time = self.request_start_times[rnti_str][request_index]
-                    # elapsed_time_ms = (time.time() - start_time) * 1000
-                    # self.log_file.write(
-                    #     f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n"
-                    # )
-                    # self.log_file.flush()
+                    start_time = self.request_start_times[rnti_str][request_index]
+                    elapsed_time_ms = (time.time() - start_time) * 1000
+                    self.log_file.write(
+                        f"Request {request_index} from RNTI {rnti_str} completed in {elapsed_time_ms:.2f}ms at {time.time()}\n"
+                    )
+                    self.log_file.flush()
                     
                     # Track the highest completed request ID
                     if rnti_str not in self.last_completed_request_id:
@@ -179,7 +183,15 @@ class TuttiController:
                         )
                     self.reset_priority(rnti_str)
                     
-                    del self.request_start_times[rnti_str][request_index]
+                    # Clean up all requests <= current request_index
+                    expired_req_ids = [req_id for req_id in self.request_start_times[rnti_str] if req_id <= request_index]
+                    for req_id in expired_req_ids:
+                        if req_id in self.request_start_times[rnti_str]:
+                            del self.request_start_times[rnti_str][req_id]
+                    expired_req_ids = [req_id for req_id in self.request_prb_allocations[rnti_str] if req_id <= request_index]
+                    for req_id in expired_req_ids:
+                        if rnti_str in self.request_prb_allocations and req_id in self.request_prb_allocations[rnti_str]:
+                            del self.request_prb_allocations[rnti_str][req_id]
                 
                 # Handle resource cleanup
                 if (
@@ -346,7 +358,7 @@ class TuttiController:
     def _calculate_incentive_priority(self, ue_rnti: str) -> float:
         """Calculate priority for incentive mode (first half of latency requirement)"""
         # Constants
-        BYTES_PER_PRB = 90
+        BYTES_PER_PRB = 80
         TTI_DURATION = 2.5  # ms
         DEFAULT_PRIORITY_OFFSET = 1.0  # Initial priority offset
         
@@ -392,7 +404,7 @@ class TuttiController:
             if actual_prbs > 0:
                 current_offset = self.ue_priorities[ue_rnti] + max(DEFAULT_PRIORITY_OFFSET, abs(actual_prbs - ue_prb_requirements[ue_rnti][1])/actual_prbs)
             else:
-                current_offset = self.ue_priorities[ue_rnti] + abs(actual_prbs - ue_prb_requirements[ue_rnti][1])
+                current_offset = self.ue_priorities[ue_rnti] + DEFAULT_PRIORITY_OFFSET
         self.log_file.write(f"incentive {ue_rnti} {actual_prbs} {ue_prb_requirements[ue_rnti][1]} {current_offset}\n")
         self.log_file.flush()  # Ensure immediate write
         return current_offset
@@ -400,7 +412,7 @@ class TuttiController:
     def _calculate_accelerate_priority(self, ue_rnti: str) -> float:
         """Calculate priority for accelerate mode (second half of latency requirement)"""
         # Constants
-        BYTES_PER_PRB = 90
+        BYTES_PER_PRB = 80
         MS_TO_S = 0.001  # Convert ms to s
         
         # Get current request info
@@ -427,8 +439,8 @@ class TuttiController:
         remaining_prbs = max(0, total_prbs_needed - prbs_allocated)
         
         # Calculate priority using exponential decay and remaining PRBs
-        priority = self.ue_priorities[ue_rnti] + remaining_prbs * math.exp(-1 * time_to_deadline_s)
-        self.log_file.write(f"accelerate {ue_rnti} {prbs_allocated} {total_prbs_needed} {time_to_deadline_s} {priority}\n")
+        priority = remaining_prbs * math.exp(-1 * time_to_deadline_s)
+        self.log_file.write(f"accelerate {ue_rnti} {earliest_req_id} {prbs_allocated} {total_prbs_needed} {time_to_deadline_s} {priority}\n")
         self.log_file.flush()
         return priority
 
@@ -536,6 +548,8 @@ class TuttiController:
             if earliest_req_id not in self.request_prb_allocations[rnti]:
                 self.request_prb_allocations[rnti][earliest_req_id] = 0
             self.request_prb_allocations[rnti][earliest_req_id] += prbs
+            self.log_file.write(f"PRB Update - RNTI: {rnti}, earliest_req_id: {earliest_req_id}, prbs_allocated: {self.request_prb_allocations[rnti][earliest_req_id]}, slot: {slot}\n")
+            self.log_file.flush()
 
     def __del__(self):
         """Ensure sockets are closed when object is destroyed"""
