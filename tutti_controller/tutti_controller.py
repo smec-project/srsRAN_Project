@@ -42,8 +42,6 @@ class TuttiController:
         self.running = False
         self.current_metrics: Dict[str, dict] = {}  # RNTI (str) -> metrics
         self.ue_info: Dict[str, dict] = {}  # RNTI (str) -> {app_id, latency_req, request_size, ue_idx}
-        self.request_sequences: Dict[str, list] = {}  # RNTI (str) -> list of sequence numbers
-        self.app_requirements: Dict[str, Dict[str, dict]] = {}  # UE_IDX -> {app_id -> requirements}
         
         # Track resource requirements and pending requests for each UE
         self.ue_resource_needs: Dict[str, int] = {}  # RNTI -> total bytes needed
@@ -142,7 +140,6 @@ class TuttiController:
                         "latency_req": float(slo_ms),
                         "request_size": request_size,
                     }
-                    self.request_sequences[rnti_str] = []
                     self.ue_resource_needs[rnti_str] = 0
                     self.ue_pending_requests[rnti_str] = {}
                     self.request_start_times[rnti_str] = {}
