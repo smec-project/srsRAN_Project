@@ -61,6 +61,8 @@ private:
   /// Fairness parameters.
   /// Coefficient used to tweak decision in favor of fairness or throughput.
   const double fairness_coeff;
+  /// Low latency policy type: "tutti" or "smec".
+  const std::string low_latency_policy;
   /// Coefficient used to compute exponential moving average.
   const double exp_avg_alpha = 0.01;
 

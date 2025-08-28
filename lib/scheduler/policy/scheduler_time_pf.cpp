@@ -71,6 +71,7 @@ bool scheduler_time_pf::setup_server_socket()
 
 scheduler_time_pf::scheduler_time_pf(const scheduler_ue_expert_config& expert_cfg_) :
   fairness_coeff(std::get<time_pf_scheduler_expert_config>(expert_cfg_.strategy_cfg).pf_sched_fairness_coeff),
+  low_latency_policy(std::get<time_pf_scheduler_expert_config>(expert_cfg_.strategy_cfg).low_latency_policy),
   running(true)
 {
   if (setup_server_socket()) {
@@ -562,17 +563,18 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   const double rate_weight = compute_ul_rate_weight(
       u, current_avg_rate, ue_cc->cfg().cell_cfg_common.ul_cfg_common.init_ul_bwp.generic_params.scs);
 
-  // if (deadline_priority > 0) {
-  //   ul_prio = deadline_priority;
-  // } else {
-  //   ul_prio = rate_weight * pf_weight;
-  // }
-  ul_prio = rate_weight * 0 + pf_weight + deadline_priority;
-  // if (deadline_priority > 0) {
-  //   std::cout << "pf_weight: " << pf_weight << " deadline_priority: " << deadline_priority << std::endl;
-  // } else {
-  //   std::cout << "pf_weight: " << pf_weight << std::endl;
-  // }
+  // Apply priority calculation based on low latency policy
+  if (parent->low_latency_policy == "tutti") {
+    // TUTTI policy: ul_prio = rate_weight * 0 + pf_weight + deadline_priority
+    ul_prio = rate_weight * 0 + pf_weight + deadline_priority;
+  } else {
+    // SMEC policy: prioritize deadline_priority when > 0, otherwise use rate_weight * pf_weight
+    if (deadline_priority > 0) {
+      ul_prio = deadline_priority;
+    } else {
+      ul_prio = rate_weight * pf_weight;
+    }
+  }
   sr_ind_received = u.has_pending_sr();
 }
 
