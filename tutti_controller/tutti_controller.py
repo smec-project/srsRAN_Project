@@ -287,29 +287,28 @@ class TuttiController:
 
     def _handle_sr_metrics(self, rnti, slot):
         """Handle SR indication metrics"""
-        # Convert RNTI to string for compatibility
-        rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
-        
+        # Convert RNTI to string for compatibility     
         # self.log_file.write(
         #     f"SR received from RNTI=0x{rnti_str}, slot={slot}\n"
         # )
         # self.log_file.flush()
+        pass
 
     def _handle_bsr_metrics(self, rnti, bytes_val, slot):
         """Handle BSR metrics"""
         # Convert RNTI to string for compatibility
         rnti_str = f"{rnti:04x}"  # Convert to 4-digit hex string
-        
-        # self.log_file.write(
-        #     f"BSR received from RNTI=0x{rnti_str}, slot={slot}, bytes={bytes_val}\n"
-        # )
-        # self.log_file.flush()
 
         if rnti_str not in self.current_metrics:
             self.current_metrics[rnti_str] = {}
         self.current_metrics[rnti_str].update(
             {"BSR_BYTES": bytes_val, "BSR_SLOT": slot}
         )
+
+        # self.log_file.write(
+        #     f"BSR received from RNTI=0x{rnti_str}, slot={slot}, bytes={bytes_val}\n"
+        # )
+        # self.log_file.flush()
 
     def set_priority(self, rnti: str, priority: float):
         """Send priority update to RAN via UDP"""
