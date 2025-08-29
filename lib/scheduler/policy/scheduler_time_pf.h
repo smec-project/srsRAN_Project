@@ -68,6 +68,8 @@ private:
 
   static std::mutex                 priorities_mutex;
   static std::map<unsigned, double> ul_priorities;
+  static std::map<unsigned, double> va_priorities;
+  static std::map<unsigned, double> va_metric_priority;
 
   /// Holds the information needed to compute priority of a UE in a priority queue.
   struct ue_ctxt {
