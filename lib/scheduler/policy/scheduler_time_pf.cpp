@@ -278,6 +278,15 @@ void scheduler_time_pf::ul_sched(ue_pusch_allocator&          pusch_alloc,
 
     // Apply ARMA policy logic
     if (low_latency_policy == "arma") {
+      // Check if current UE has pending SR - if so, prioritize it and skip ARMA reallocation
+      if (ue.sr_ind_received) {
+        alloc_result = try_ul_alloc(ue, ues, pusch_alloc, rem_rbs);
+        ue.save_ul_alloc(alloc_result.alloc_bytes);
+        ul_queue.pop();
+        rem_rbs = slice_candidate.remaining_rbs();
+        continue;
+      }
+
       // Get the RNTI of the highest priority UE
       const auto& highest_prio_slice_ue = ues[ue.ue_index];
       unsigned    highest_prio_rnti     = static_cast<unsigned>(highest_prio_slice_ue.crnti()) & 0xFFFF;
