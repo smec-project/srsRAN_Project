@@ -81,20 +81,8 @@ class PriorityManager:
         current_time = time.time()
         elapsed_time_ms = (current_time - start_time) * 1000
         
-        incentive_threshold = latency_req / 2
-        
-        # Calculate priority based on current state
-        if elapsed_time_ms < incentive_threshold:
-            priority = self._calculate_incentive_priority(rnti_str)
-        elif elapsed_time_ms < latency_req:
-            priority = self._calculate_accelerate_priority(rnti_str, earliest_req_id)
-        else:
-            priority = 100  # High priority for overdue requests
-            self.logger.write(
-                f"rnti: {rnti_str} latency_req: {latency_req} elapsed_time_ms: "
-                f"{elapsed_time_ms} priority: {priority}\n"
-            )
-            self.logger.flush()
+        # Calculate priority using new formula: frame_size / (prb * remaining_time)
+        priority = self._calculate_priority_with_formula(rnti_str, earliest_req_id, elapsed_time_ms, latency_req)
         
         # Update priority state and send to scheduler
         self.ue_priorities[rnti_str] = priority
@@ -102,6 +90,50 @@ class PriorityManager:
         
         self.logger.write(f"PRIORITY_SET: RNTI {rnti_str} -> priority {priority}\n")
         self.logger.flush()
+    
+    def _calculate_priority_with_formula(
+        self, rnti_str: str, earliest_req_id: int, elapsed_time_ms: float, latency_req: float
+    ) -> float:
+        """Calculate priority using formula: frame_size / (prb * remaining_time).
+        
+        Args:
+            rnti_str: RNTI as hex string.
+            earliest_req_id: ID of the earliest request.
+            elapsed_time_ms: Elapsed time since request start in milliseconds.
+            latency_req: Latency requirement in milliseconds.
+            
+        Returns:
+            Calculated priority value.
+        """
+        # Get request size (frame_size)
+        pending_requests = self.app_handler.get_pending_requests(rnti_str)
+        if earliest_req_id not in pending_requests:
+            return 0.0
+        
+        frame_size = pending_requests[earliest_req_id]
+        
+        # Get total PRBs allocated for this request
+        prbs_allocated = self.metrics_processor.get_request_prb_allocation(rnti_str, earliest_req_id)
+        if prbs_allocated == 0:
+            prbs_allocated = 1  # Avoid division by zero
+        
+        # Calculate remaining_time in seconds
+        remaining_time_ms = latency_req - elapsed_time_ms
+        remaining_time_s = remaining_time_ms / 1000.0
+        if remaining_time_s <= 0:
+            remaining_time_s = 0.01  # Use 0.01s if <= 0
+        
+        # Calculate priority using the formula
+        priority = frame_size / (prbs_allocated * remaining_time_s)
+        
+        self.logger.write(
+            f"PRIORITY_CALC: RNTI {rnti_str} req_id {earliest_req_id} "
+            f"frame_size: {frame_size} prbs: {prbs_allocated} remaining_time: {remaining_time_s:.3f}s "
+            f"priority: {priority:.6f}\n"
+        )
+        self.logger.flush()
+        
+        return priority
     
     def _get_valid_requests(self, rnti_str: str, requests: Dict[int, float]) -> Dict[int, float]:
         """Get requests that haven't been completed yet.
@@ -119,189 +151,6 @@ class PriorityManager:
             if req_id > last_completed
         }
     
-    def _calculate_ue_prb_requirements(self) -> Dict[str, Tuple[int, int]]:
-        """Calculate PRB requirements for all UEs with active requests.
-        
-        Returns:
-            Dictionary mapping rnti -> (total_prbs, prbs_per_tti).
-        """
-        ue_prb_requirements = {}
-        
-        # Calculate for each UE with active requests
-        all_rntis = list(self.app_handler.request_start_times.keys())
-        for rnti in all_rntis:
-            request_times = self.app_handler.get_request_start_times(rnti)
-            if not request_times:
-                continue
-            
-            # Get earliest request
-            earliest_req_id = min(request_times.items(), key=lambda x: x[1])[0]
-            pending_requests = self.app_handler.get_pending_requests(rnti)
-            
-            if earliest_req_id not in pending_requests:
-                continue
-                
-            request_size = pending_requests[earliest_req_id]
-            total_prbs = calculate_prbs_needed(request_size, self.config.bytes_per_prb)
-            
-            ue_info = self.app_handler.get_ue_info(rnti)
-            if not ue_info:
-                continue
-                
-            latency_req = ue_info['latency_req']
-            available_ttis = latency_req / self.config.tti_duration_ms
-            prbs_per_tti = max(1, (total_prbs + int(available_ttis) - 1) // int(available_ttis))
-            
-            ue_prb_requirements[rnti] = (total_prbs, prbs_per_tti)
-        
-        return ue_prb_requirements
-    
-    def _calculate_incentive_priority(self, ue_rnti: str) -> float:
-        """Calculate priority for incentive mode (first half of latency requirement).
-        
-        This algorithm adjusts priority based on the difference between required
-        and actual PRB allocations, implementing a game-theoretic approach.
-        
-        Args:
-            ue_rnti: RNTI as hex string.
-            
-        Returns:
-            Calculated priority value.
-        """
-        # Get UE requirements and calculate PRB needs
-        ue_prb_requirements = self._calculate_ue_prb_requirements()
-        
-        # Get the latest slot from history
-        latest_slot = self.metrics_processor.get_latest_slot()
-        if not latest_slot or ue_rnti not in ue_prb_requirements:
-            return self.config.default_priority_offset
-        
-        # Calculate priority adjustments based on PRB differences
-        priority_adjustments = {}
-        for rnti, (_, required_prbs_per_tti) in ue_prb_requirements.items():
-            prb_history = self.metrics_processor.get_prb_history(rnti)
-            if not prb_history or latest_slot not in prb_history:
-                self.logger.write(f"Warning: No PRB history for RNTI {rnti}\n")
-                self.logger.flush()
-                continue
-            
-            actual_prbs = prb_history[latest_slot]
-            prb_difference = actual_prbs - required_prbs_per_tti
-            current_offset = self.ue_priorities.get(rnti, self.config.default_priority_offset)
-            priority_adjustments[rnti] = prb_difference * current_offset
-        
-        if not priority_adjustments or ue_rnti not in priority_adjustments:
-            return self.config.default_priority_offset
-        
-        # Apply incentive algorithm logic
-        total_priority_metric = sum(priority_adjustments.values())
-        ue_priority_metric = priority_adjustments[ue_rnti]
-        current_offset = self.ue_priorities.get(ue_rnti, self.config.default_priority_offset)
-        
-        prb_history = self.metrics_processor.get_prb_history(ue_rnti)
-        actual_prbs = prb_history[latest_slot] if prb_history and latest_slot in prb_history else 0
-        required_prbs = ue_prb_requirements[ue_rnti][1]
-        
-        if ue_priority_metric > 0 and total_priority_metric < 0:
-            current_offset = current_offset / 2
-        else:
-            if actual_prbs > 0:
-                current_offset = self.ue_priorities.get(ue_rnti, self.config.default_priority_offset) + max(
-                    self.config.default_priority_offset, 
-                    abs(actual_prbs - required_prbs) / actual_prbs
-                )
-            else:
-                current_offset = self.ue_priorities.get(ue_rnti, self.config.default_priority_offset) + abs(actual_prbs - required_prbs)
-        
-        self.logger.write(
-            f"incentive {ue_rnti} {actual_prbs} {required_prbs} {current_offset}\n"
-        )
-        self.logger.flush()
-        return current_offset
-    
-    def _calculate_accelerate_priority(self, ue_rnti: str, request_id: int) -> float:
-        """Calculate priority for accelerate mode (second half of latency requirement).
-        
-        This algorithm uses exponential decay based on time to deadline and
-        remaining PRB requirements.
-        
-        Args:
-            ue_rnti: RNTI as hex string.
-            request_id: ID of the request.
-            
-        Returns:
-            Calculated priority value.
-        """
-        # Get current request info
-        ue_info = self.app_handler.get_ue_info(ue_rnti)
-        pending_requests = self.app_handler.get_pending_requests(ue_rnti)
-        request_start_times = self.app_handler.get_request_start_times(ue_rnti)
-        
-        if not ue_info or request_id not in pending_requests or request_id not in request_start_times:
-            return 0.0
-        
-        # Calculate timing information
-        start_time = request_start_times[request_id]
-        elapsed_time_ms = (time.time() - start_time) * 1000
-        latency_req_ms = ue_info['latency_req']
-        time_to_deadline_s = (latency_req_ms - elapsed_time_ms) * self.config.ms_to_seconds
-        
-        # Calculate remaining PRBs needed
-        request_size = pending_requests[request_id]
-        total_prbs_needed = calculate_prbs_needed(request_size, self.config.bytes_per_prb)
-        
-        # Get allocated PRBs for this request
-        prbs_allocated = self.metrics_processor.get_request_prb_allocation(ue_rnti, request_id)
-        
-        if total_prbs_needed > prbs_allocated:
-            remaining_prbs = total_prbs_needed - prbs_allocated
-        else:
-            remaining_prbs = 50  # Default value when request is satisfied
-        
-        # Calculate priority using exponential decay
-        priority = remaining_prbs * math.exp(-1 * time_to_deadline_s)
-        
-        self.logger.write(
-            f"accelerate {ue_rnti} {request_id} {prbs_allocated} {total_prbs_needed} "
-            f"{time_to_deadline_s} {priority}\n"
-        )
-        self.logger.flush()
-        return priority
-    
-    def _calculate_ue_prb_requirements(self) -> Dict[str, Tuple[int, int]]:
-        """Calculate PRB requirements for all UEs with active requests.
-        
-        Returns:
-            Dictionary mapping RNTI -> (total_prbs, prbs_per_tti).
-        """
-        ue_prb_requirements = {}
-        
-        # Get all UEs with active requests
-        for rnti_str in self.app_handler.request_start_times.keys():
-            if not self.app_handler.request_start_times[rnti_str]:
-                continue
-            
-            # Get earliest request
-            earliest_req_id = min(
-                self.app_handler.request_start_times[rnti_str].items(), 
-                key=lambda x: x[1]
-            )[0]
-            
-            pending_requests = self.app_handler.get_pending_requests(rnti_str)
-            ue_info = self.app_handler.get_ue_info(rnti_str)
-            
-            if earliest_req_id not in pending_requests or not ue_info:
-                continue
-            
-            request_size = pending_requests[earliest_req_id]
-            total_prbs = calculate_prbs_needed(request_size, self.config.bytes_per_prb)
-            latency_req = ue_info['latency_req']
-            available_ttis = latency_req / self.config.tti_duration_ms
-            prbs_per_tti = (total_prbs + int(available_ttis) - 1) // int(available_ttis)
-            
-            ue_prb_requirements[rnti_str] = (total_prbs, prbs_per_tti)
-        
-        return ue_prb_requirements
     
     def set_priority(self, rnti_str: str, priority: float) -> bool:
         """Send priority update to RAN via network handler.

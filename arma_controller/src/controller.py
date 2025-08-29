@@ -313,19 +313,10 @@ class TuttiController:
             current_rnti: RNTI that triggered this slot update (for reference).
             prbs: PRBs allocated to current_rnti (for reference).
         """
-        
-        # Update RNTIs that didn't get PRBs in the previous slot
-        for rnti in list(self.app_handler.request_start_times.keys()):
-            if (self.app_handler.request_start_times[rnti] and 
-                rnti not in self.metrics_processor.slot_prb_allocations):
-                prev_slot = self.metrics_processor.current_slot - 1 if self.metrics_processor.current_slot else 0
-                self.metrics_processor._update_prb_history(rnti, prev_slot, 0)
-        
         # Update priorities for all RNTIs with active requests
-        active_rntis = []
+        # This is necessary because remaining_time changes with each slot
         for rnti in list(self.app_handler.request_start_times.keys()):
             if self.app_handler.request_start_times[rnti]:
-                active_rntis.append(rnti)
                 self.priority_manager.calculate_and_update_priority(rnti)
     
     def _register_ue(self, rnti_str: str, request_size: int, slo_ms: int) -> None:
