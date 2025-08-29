@@ -35,7 +35,6 @@ constexpr unsigned MAX_PF_COEFF = 10;
 
 std::mutex                 scheduler_time_pf::priorities_mutex;
 std::map<unsigned, double> scheduler_time_pf::ul_priorities;
-std::map<unsigned, double> scheduler_time_pf::va_priorities;
 std::map<unsigned, double> scheduler_time_pf::va_metric_priority;
 
 bool scheduler_time_pf::setup_server_socket()
@@ -570,13 +569,11 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
     // TUTTI policy: ul_prio = rate_weight * 0 + pf_weight + deadline_priority
     ul_prio = rate_weight * 0 + pf_weight + deadline_priority;
   } else if (parent->low_latency_policy == "arma") {
-    double va_priority = 0.0;
     {
       std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
-      auto                        it = scheduler_time_pf::va_priorities.find(rnti_val);
-      if (it != scheduler_time_pf::va_priorities.end()) {
-        va_priority                                     = it->second;
-        scheduler_time_pf::va_metric_priority[rnti_val] = va_priority * estimated_rate;
+      auto                        it = scheduler_time_pf::ul_priorities.find(rnti_val);
+      if (it != scheduler_time_pf::ul_priorities.end()) {
+        scheduler_time_pf::va_metric_priority[rnti_val] = it->second * estimated_rate;
       } else {
         scheduler_time_pf::va_metric_priority[rnti_val] = 0.0;
       }
@@ -732,12 +729,10 @@ void scheduler_time_pf::handle_priority_messages()
       std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
       if (msg.is_reset) {
         scheduler_time_pf::ul_priorities.erase(rnti_val);
-        scheduler_time_pf::va_priorities.erase(rnti_val);
         scheduler_time_pf::va_metric_priority.erase(rnti_val);
         // std::cout << "Reset priority for RNTI 0x" << std::hex << rnti_val << std::endl;
       } else {
         scheduler_time_pf::ul_priorities[rnti_val] = msg.priority;
-        scheduler_time_pf::va_priorities[rnti_val] = msg.priority;
         // std::cout << "Updated priority for RNTI 0x" << std::hex << rnti_val
         //          << std::dec << " to " << msg.priority << std::endl;
       }
