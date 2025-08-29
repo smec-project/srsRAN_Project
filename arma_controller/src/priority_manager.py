@@ -124,7 +124,7 @@ class PriorityManager:
             remaining_time_s = 0.01  # Use 0.01s if <= 0
         
         # Calculate priority using the formula
-        priority = frame_size / (prbs_allocated * remaining_time_s)
+        priority = prbs_allocated / (frame_size * remaining_time_s)
         
         self.logger.write(
             f"PRIORITY_CALC: RNTI {rnti_str} req_id {earliest_req_id} "
