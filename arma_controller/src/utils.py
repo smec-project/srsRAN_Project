@@ -1,4 +1,4 @@
-"""Utility functions and classes for Tutti Controller."""
+"""Utility functions and classes for Arma Controller."""
 
 import time
 from typing import Optional, TextIO

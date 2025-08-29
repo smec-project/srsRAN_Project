@@ -1,4 +1,4 @@
-"""Main Tutti Controller class that orchestrates all components."""
+"""Main Arma Controller class that orchestrates all components."""
 
 import threading
 import time
@@ -12,8 +12,8 @@ from .metrics_processor import MetricsProcessor
 from .priority_manager import PriorityManager
 
 
-class TuttiController:
-    """Main Tutti Controller class.
+class ArmaController:
+    """Main Arma Controller class.
     
     Orchestrates all components including network handling, application message
     processing, RAN metrics processing, and priority management for UDP-based
@@ -21,7 +21,7 @@ class TuttiController:
     """
     
     def __init__(self, config: Optional[ControllerConfig] = None):
-        """Initialize the Tutti Controller.
+        """Initialize the Arma Controller.
         
         Args:
             config: Configuration settings. Uses default if None.
@@ -75,7 +75,7 @@ class TuttiController:
         self.app_thread.start()
         self.metrics_thread.start()
         
-        self.logger.write("Tutti Controller started successfully\n")
+        self.logger.write("Arma Controller started successfully\n")
         self.logger.flush()
         return True
     
@@ -89,7 +89,7 @@ class TuttiController:
         # Close logger
         self.logger.close()
         
-        self.logger.write("Tutti Controller stopped\n")
+        self.logger.write("Arma Controller stopped\n")
         self.logger.flush()
     
     def _handle_app_messages(self) -> None:

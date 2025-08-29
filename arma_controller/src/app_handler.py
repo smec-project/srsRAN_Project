@@ -1,4 +1,4 @@
-"""Application message handler for Tutti Controller."""
+"""Application message handler for Arma Controller."""
 
 import struct
 import time

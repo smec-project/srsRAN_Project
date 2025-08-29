@@ -1,4 +1,4 @@
-"""Configuration management for Tutti Controller."""
+"""Configuration management for Arma Controller."""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -6,10 +6,10 @@ from typing import Optional
 
 @dataclass
 class ControllerConfig:
-    """Configuration settings for the Tutti Controller.
+    """Configuration settings for the Arma Controller.
     
     This class holds all configuration parameters needed to initialize
-    and run the Tutti Controller system.
+    and run the Arma Controller system.
     """
     
     # Network ports and addresses

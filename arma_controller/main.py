@@ -1,14 +1,14 @@
-"""Main entry point for the Tutti Controller application."""
+"""Main entry point for the Arma Controller application."""
 
 import argparse
 import time
 
-from src import TuttiController, ControllerConfig
+from src import ArmaController, ControllerConfig
 
 
 def main():
-    """Main function to run the Tutti Controller."""
-    parser = argparse.ArgumentParser(description="Tutti Controller")
+    """Main function to run the Arma Controller."""
+    parser = argparse.ArgumentParser(description="Arma Controller")
     parser.add_argument(
         "--app-port",
         type=int,
@@ -58,11 +58,11 @@ def main():
     )
 
     # Create and start controller
-    controller = TuttiController(config)
+    controller = ArmaController(config)
 
     if controller.start():
         try:
-            print("Tutti Controller is running. Press Ctrl+C to stop.")
+            print("Arma Controller is running. Press Ctrl+C to stop.")
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
@@ -70,7 +70,7 @@ def main():
         finally:
             controller.stop()
     else:
-        print("Failed to start Tutti Controller")
+        print("Failed to start Arma Controller")
         return 1
 
     return 0

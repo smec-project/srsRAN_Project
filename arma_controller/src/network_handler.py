@@ -1,4 +1,4 @@
-"""Network communication handler for Tutti Controller."""
+"""Network communication handler for Arma Controller."""
 
 import socket
 import struct
@@ -9,7 +9,7 @@ from .utils import Logger
 
 
 class NetworkHandler:
-    """Handles all network communication for the Tutti Controller.
+    """Handles all network communication for the Arma Controller.
     
     This class manages UDP sockets for receiving application messages,
     receiving RAN metrics, and sending priority control messages.

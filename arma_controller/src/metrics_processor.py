@@ -1,4 +1,4 @@
-"""RAN metrics processor for Tutti Controller."""
+"""RAN metrics processor for Arma Controller."""
 
 import struct
 from typing import Dict, List, Optional

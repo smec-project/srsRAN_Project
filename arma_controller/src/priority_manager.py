@@ -1,4 +1,4 @@
-"""Priority management for Tutti Controller."""
+"""Priority management for Arma Controller."""
 
 import math
 import time
