@@ -67,6 +67,7 @@ private:
   const double exp_avg_alpha = 0.01;
 
   static std::mutex                 priorities_mutex;
+  static std::mutex                 va_metric_priority_mutex;
   static std::map<unsigned, double> ul_priorities;
   static std::map<unsigned, double> va_metric_priority;
 

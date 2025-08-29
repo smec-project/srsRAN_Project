@@ -34,6 +34,7 @@ using namespace srsran;
 constexpr unsigned MAX_PF_COEFF = 10;
 
 std::mutex                 scheduler_time_pf::priorities_mutex;
+std::mutex                 scheduler_time_pf::va_metric_priority_mutex;
 std::map<unsigned, double> scheduler_time_pf::ul_priorities;
 std::map<unsigned, double> scheduler_time_pf::va_metric_priority;
 
@@ -273,7 +274,50 @@ void scheduler_time_pf::ul_sched(ue_pusch_allocator&          pusch_alloc,
   ul_alloc_result alloc_result = {alloc_status::invalid_params};
   unsigned        rem_rbs      = slice_candidate.remaining_rbs();
   while (not ul_queue.empty() and rem_rbs > 0 and alloc_result.status != alloc_status::skip_slot) {
-    ue_ctxt& ue  = *ul_queue.top();
+    ue_ctxt& ue = *ul_queue.top();
+
+    // Apply ARMA policy logic
+    if (low_latency_policy == "arma") {
+      // Get the RNTI of the highest priority UE
+      const auto& highest_prio_slice_ue = ues[ue.ue_index];
+      unsigned    highest_prio_rnti     = static_cast<unsigned>(highest_prio_slice_ue.crnti()) & 0xFFFF;
+
+      // Check if this RNTI exists in va_metric_priority
+      {
+        std::lock_guard<std::mutex> lock(va_metric_priority_mutex);
+        if (va_metric_priority.find(highest_prio_rnti) != va_metric_priority.end()) {
+          // Find UE with maximum va_metric_priority value
+          auto max_va_it = std::max_element(va_metric_priority.begin(),
+                                            va_metric_priority.end(),
+                                            [](const auto& a, const auto& b) { return a.second < b.second; });
+
+          if (max_va_it != va_metric_priority.end()) {
+            unsigned max_va_rnti = max_va_it->first;
+
+            // Find the UE context with the maximum VA metric priority
+            bool found_max_va_ue = false;
+            for (const auto& u : ues) {
+              unsigned u_rnti = static_cast<unsigned>(u.crnti()) & 0xFFFF;
+              if (u_rnti == max_va_rnti) {
+                ue_ctxt& max_va_ue = ue_history_db[u.ue_index()];
+                alloc_result       = try_ul_alloc(max_va_ue, ues, pusch_alloc, rem_rbs);
+                max_va_ue.save_ul_alloc(alloc_result.alloc_bytes);
+                found_max_va_ue = true;
+                break;
+              }
+            }
+
+            if (found_max_va_ue) {
+              ul_queue.pop();
+              rem_rbs = slice_candidate.remaining_rbs();
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    // Normal allocation (for non-ARMA policies or when VA metric not applicable)
     alloc_result = try_ul_alloc(ue, ues, pusch_alloc, rem_rbs);
     ue.save_ul_alloc(alloc_result.alloc_bytes);
     ul_queue.pop();
@@ -571,6 +615,7 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   } else if (parent->low_latency_policy == "arma") {
     {
       std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
+      std::lock_guard<std::mutex> va_lock(scheduler_time_pf::va_metric_priority_mutex);
       auto                        it = scheduler_time_pf::ul_priorities.find(rnti_val);
       if (it != scheduler_time_pf::ul_priorities.end()) {
         scheduler_time_pf::va_metric_priority[rnti_val] = it->second * estimated_rate;
@@ -727,6 +772,7 @@ void scheduler_time_pf::handle_priority_messages()
 
     {
       std::lock_guard<std::mutex> lock(scheduler_time_pf::priorities_mutex);
+      std::lock_guard<std::mutex> va_lock(scheduler_time_pf::va_metric_priority_mutex);
       if (msg.is_reset) {
         scheduler_time_pf::ul_priorities.erase(rnti_val);
         scheduler_time_pf::va_metric_priority.erase(rnti_val);
