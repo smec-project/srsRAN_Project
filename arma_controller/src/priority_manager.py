@@ -121,7 +121,7 @@ class PriorityManager:
         remaining_time_ms = latency_req - elapsed_time_ms
         remaining_time_s = remaining_time_ms / 1000.0
         if remaining_time_s <= 0:
-            remaining_time_s = 0.01  # Use 0.01s if <= 0
+            remaining_time_s = 0.001  # Use 0.001s if <= 0
         
         # Calculate priority using the formula
         priority = prbs_allocated / (frame_size * remaining_time_s)
