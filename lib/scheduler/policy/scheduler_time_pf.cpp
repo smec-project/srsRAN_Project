@@ -567,6 +567,8 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
   if (parent->low_latency_policy == "tutti") {
     // TUTTI policy: ul_prio = rate_weight * 0 + pf_weight + deadline_priority
     ul_prio = rate_weight * 0 + pf_weight + deadline_priority;
+  } else if (parent->low_latency_policy == "arma") {
+    ul_prio = pf_weight;
   } else {
     // SMEC policy: prioritize deadline_priority when > 0, otherwise use rate_weight * pf_weight
     if (deadline_priority > 0) {

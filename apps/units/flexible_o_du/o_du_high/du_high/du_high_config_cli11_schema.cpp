@@ -551,10 +551,12 @@ static void configure_cli11_pf_scheduler_expert_args(CLI::App& app, time_pf_sche
              expert_params.pf_sched_fairness_coeff,
              "Fairness Coefficient to use in Proportional Fair policy scheduler")
       ->capture_default_str();
-  add_option(
-      app, "--low_latency_policy", expert_params.low_latency_policy, "Low latency policy type. Options: tutti, smec")
+  add_option(app,
+             "--low_latency_policy",
+             expert_params.low_latency_policy,
+             "Low latency policy type. Options: tutti, smec, arma")
       ->capture_default_str()
-      ->check(CLI::IsMember({"tutti", "smec"}));
+      ->check(CLI::IsMember({"tutti", "smec", "arma"}));
 }
 
 static void configure_cli11_policy_scheduler_expert_args(CLI::App& app, policy_scheduler_expert_config& expert_params)

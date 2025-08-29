@@ -42,7 +42,7 @@ namespace srsran {
 struct time_pf_scheduler_expert_config {
   /// Fairness Coefficient to use in Proportional Fair policy scheduler.
   double pf_sched_fairness_coeff = 2.0F;
-  /// Low latency policy type. Options: "tutti", "smec". Default: "smec".
+  /// Low latency policy type. Options: "tutti", "smec", "arma". Default: "smec".
   std::string low_latency_policy = "smec";
 };
 
