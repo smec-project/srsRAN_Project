@@ -290,6 +290,8 @@ void scheduler_time_pf::ul_sched(ue_pusch_allocator&          pusch_alloc,
           auto max_va_it = std::max_element(va_metric_priority.begin(),
                                             va_metric_priority.end(),
                                             [](const auto& a, const auto& b) { return a.second < b.second; });
+          std::cout << "Highest priority UE RNTI: " << highest_prio_rnti
+                    << "Max VA metric priority: " << max_va_it->second << std::endl;
 
           if (max_va_it != va_metric_priority.end()) {
             unsigned max_va_rnti = max_va_it->first;
@@ -619,8 +621,7 @@ void scheduler_time_pf::ue_ctxt::compute_ul_prio(const slice_ue& u,
       auto                        it = scheduler_time_pf::ul_priorities.find(rnti_val);
       if (it != scheduler_time_pf::ul_priorities.end()) {
         scheduler_time_pf::va_metric_priority[rnti_val] = it->second * estimated_rate;
-      } else {
-        scheduler_time_pf::va_metric_priority[rnti_val] = 0.0;
+        std::cout << "VA metric priority: " << scheduler_time_pf::va_metric_priority[rnti_val] << std::endl;
       }
     }
     ul_prio = pf_weight;
