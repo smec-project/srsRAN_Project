@@ -36,6 +36,7 @@ cell_cfg:
     policy_sched_cfg:
       pf_sched:
         pf_sched_fairness_coeff: 2.0
+        low_latency_policy: smec
   # tdd_ul_dl_cfg:
   #   dl_ul_tx_period: 5    
   #   nof_dl_slots: 3
