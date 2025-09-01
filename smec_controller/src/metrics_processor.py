@@ -289,13 +289,13 @@ class MetricsProcessor:
             
             # Adjust remaining time based on SR presence
             if has_sr and earliest_sr_time is not None:
-                self.logger.log(f"remaining_time: {remaining_time}, latest_bsr[3]: {latest_bsr[3]}, earliest_sr_time: {earliest_sr_time}")
+                # self.logger.log(f"remaining_time: {remaining_time}, latest_bsr[3]: {latest_bsr[3]}, earliest_sr_time: {earliest_sr_time}")
                 remaining_time = (
                     remaining_time
                     - ((latest_bsr[3] - earliest_sr_time) * 1000 + 5)
                 )
             else:
-                self.logger.log(f"remaining_time: {remaining_time}, latest_bsr[3]: {latest_bsr[3]}, prb_time: {prb_time}")
+                # self.logger.log(f"remaining_time: {remaining_time}, latest_bsr[3]: {latest_bsr[3]}, prb_time: {prb_time}")
                 remaining_time = (
                     remaining_time
                     - ((latest_bsr[3] - prb_time) * 1000)
@@ -303,7 +303,7 @@ class MetricsProcessor:
         
         # Calculate BSR increment (current - previous) as request size
         bsr_increment = latest_bsr[1] - prev_bsr[1]  # BSR bytes difference
-        
+
         self.priority_manager.add_new_request(
             rnti, remaining_time, 
             self.event_processor.gnb_max_prb_slot, 

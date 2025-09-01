@@ -162,11 +162,11 @@ class PriorityManager:
                 self.ue_remaining_times[rnti].pop(0)
                 accumulated_decrease -= request_size
                 
-                self.logger.log(
-                    f"Removed completed request for RNTI 0x{rnti:x}: "
-                    f"Request_{req_id} (size={request_size} bytes), "
-                    f"Remaining accumulated: {accumulated_decrease} bytes"
-                )
+                # self.logger.log(
+                #     f"Removed completed request for RNTI 0x{rnti:x}: "
+                #     f"Request_{req_id} (size={request_size} bytes), "
+                #     f"Remaining accumulated: {accumulated_decrease} bytes"
+                # )
             else:
                 # Not enough accumulated decrease to remove this request
                 break
@@ -259,7 +259,7 @@ class PriorityManager:
         sequence_number = self.rnti_to_sequence.get(rnti, 0)
         self.logger.log(
             f"ue{sequence_number} added request {self.positive_predictions[rnti]}, "
-            f"Remaining time: {adjusted_remaining:.2f}ms"
+            f"Remaining time: {adjusted_remaining:.2f} ms, SLO latency: {self.ue_info[rnti]['slo_latency']:.2f} ms"
         )
     
     def calculate_priority(self, rnti: int) -> float:
