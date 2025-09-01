@@ -1,6 +1,7 @@
 """RAN metrics processing functionality for SMEC Controller."""
 
 import struct
+import time
 from typing import Dict, List, Optional, Any
 from collections import deque
 
@@ -82,9 +83,9 @@ class MetricsProcessor:
         try:
             timestamp = get_current_timestamp()
             
-            self.logger.log(
-                f"SR received from RNTI=0x{rnti:x}, slot={slot} at {timestamp}"
-            )
+            # self.logger.log(
+            #     f"SR received from RNTI=0x{rnti:x}, slot={slot} at {timestamp}"
+            # )
             
             # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "SR", timestamp, slot)
@@ -120,10 +121,10 @@ class MetricsProcessor:
                 self.ue_peak_buffer_size[rnti], bytes_val
             )
             
-            self.logger.log(
-                f"BSR received from RNTI=0x{rnti:x}, slot={slot}, "
-                f"bytes={bytes_val} at {timestamp}"
-            )
+            # self.logger.log(
+            #     f"BSR received from RNTI=0x{rnti:x}, slot={slot}, "
+            #     f"bytes={bytes_val} at {timestamp}"
+            # )
             
             # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "BSR", timestamp, slot, bytes=bytes_val)
@@ -145,10 +146,10 @@ class MetricsProcessor:
         try:
             timestamp = get_current_timestamp()
             
-            self.logger.log(
-                f"PRB received from RNTI=0x{rnti:x}, slot={slot}, "
-                f"prbs={prbs} at {timestamp}"
-            )
+            # self.logger.log(
+            #     f"PRB received from RNTI=0x{rnti:x}, slot={slot}, "
+            #     f"prbs={prbs} at {timestamp}"
+            # )
             
             # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "PRB", timestamp, slot, prbs=prbs)
@@ -303,7 +304,6 @@ class MetricsProcessor:
         # Calculate BSR increment (current - previous) as request size
         bsr_increment = latest_bsr[1] - prev_bsr[1]  # BSR bytes difference
         
-        # Add the new request
         self.priority_manager.add_new_request(
             rnti, remaining_time, 
             self.event_processor.gnb_max_prb_slot, 
@@ -326,20 +326,22 @@ class MetricsProcessor:
             bsr_increased: Whether BSR increased.
             model_prediction: Model prediction value (can be None).
         """
-        timestamp = get_current_timestamp()
+        pass
+        # timestamp = get_current_timestamp()
         
-        log_msg = f"Prediction for RNTI 0x{rnti:x}: {final_prediction} at {timestamp}, "
+        # log_msg = f"Prediction for RNTI 0x{rnti:x}: {final_prediction} at {timestamp}"
         
-        if model_prediction is not None:
-            log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
-        else:
-            log_msg += f"bsr_increased={bsr_increased} (no model), "
+        # if model_prediction is not None:
+        #     log_msg += f"Model_pred={model_prediction}, bsr_increased={bsr_increased}, "
+        # else:
+        #     log_msg += f"bsr_increased={bsr_increased} (no model), "
         
-        # Add remaining times summary
-        summary = self.priority_manager.get_remaining_times_summary(rnti)
-        log_msg += summary
+        # # Add remaining times summary
+        # summary = self.priority_manager.get_remaining_times_summary(rnti)
+        # log_msg += summary
         
-        self.logger.log(log_msg)
+        # if final_prediction:
+            # self.logger.log(log_msg)
     
     def get_ue_metrics_summary(self, rnti: int) -> Dict[str, Any]:
         """Get a summary of metrics for a specific UE.

@@ -164,8 +164,8 @@ class SmecController:
                             self.priority_manager.update_priority(rnti, new_priority)
                             
                             # Log the update
-                            if log_msg:
-                                self.logger.log(log_msg)
+                            # if log_msg:
+                            #     self.logger.log(log_msg)
                         else:
                             self.logger.log(f"Failed to send priority update for RNTI {rnti}")
                 

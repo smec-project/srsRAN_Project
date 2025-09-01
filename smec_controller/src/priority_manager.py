@@ -105,7 +105,7 @@ class PriorityManager:
             if rnti in self.ue_remaining_times:
                 self.ue_remaining_times[rnti] = []
             self.ue_bsr_decrease_accumulation[rnti] = 0
-            self.logger.log(f"Cleared remaining times for RNTI 0x{rnti:x} (BSR=0)")
+            # self.logger.log(f"Cleared remaining times for RNTI 0x{rnti:x} (BSR=0)")
             return
         
         # Calculate BSR change
@@ -116,10 +116,10 @@ class PriorityManager:
             decrease_amount = abs(bsr_change)
             self.ue_bsr_decrease_accumulation[rnti] += decrease_amount
             
-            self.logger.log(
-                f"BSR decreased for RNTI 0x{rnti:x}: -{decrease_amount} bytes, "
-                f"Total accumulated: {self.ue_bsr_decrease_accumulation[rnti]} bytes"
-            )
+            # self.logger.log(
+            #     f"BSR decreased for RNTI 0x{rnti:x}: -{decrease_amount} bytes, "
+            #     f"Total accumulated: {self.ue_bsr_decrease_accumulation[rnti]} bytes"
+            # )
             
             # Check if we can remove the oldest request
             self._check_and_remove_completed_requests(rnti)
@@ -227,7 +227,7 @@ class PriorityManager:
         # Update positive prediction counter
         self.positive_predictions[rnti] += 1
 
-        self.logger.log(f"remaining_time: {remaining_time}, gnb_max_prb_slot: {gnb_max_prb_slot}, latest_bsr_slot: {latest_bsr_slot}")
+        # self.logger.log(f"remaining_time: {remaining_time}, gnb_max_prb_slot: {gnb_max_prb_slot}, latest_bsr_slot: {latest_bsr_slot}")
         adjusted_remaining = remaining_time
         # Calculate adjusted remaining time based on slot differences
         # adjusted_remaining = remaining_time - (gnb_max_prb_slot - latest_bsr_slot) * 0.5
