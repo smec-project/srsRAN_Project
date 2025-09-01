@@ -40,6 +40,10 @@ class PriorityManager:
         
         # UE information storage
         self.ue_info: Dict[int, dict] = {}
+        
+        # Global sequence number tracking
+        self.global_sequence_counter: int = 0
+        self.rnti_to_sequence: Dict[int, int] = {}
     
     def initialize_ue_priority(self, rnti: int) -> None:
         """Initialize priority tracking for a new UE.
@@ -62,8 +66,16 @@ class PriorityManager:
             rnti: Radio Network Temporary Identifier as integer.
             slo_latency: SLO latency requirement in milliseconds.
         """
+        # Assign global sequence number if UE is not already registered
+        if rnti not in self.rnti_to_sequence:
+            self.global_sequence_counter += 1
+            self.rnti_to_sequence[rnti] = self.global_sequence_counter
+        
+        sequence_number = self.rnti_to_sequence[rnti]
+        
         self.ue_info[rnti] = {
             "slo_latency": slo_latency,
+            "sequence_number": sequence_number,
         }
         
         # Initialize tracking structures
@@ -80,6 +92,7 @@ class PriorityManager:
         
         self.logger.log(
             f"Registered UE - RNTI: 0x{rnti:x}, "
+            f"Sequence: {sequence_number}, "
             f"SLO Latency: {slo_latency}ms"
         )
     
@@ -243,9 +256,10 @@ class PriorityManager:
         # Update last event time when adding new request
         self.ue_last_event_time[rnti] = get_current_timestamp()
         
+        sequence_number = self.rnti_to_sequence.get(rnti, 0)
         self.logger.log(
-            f"Added new request for RNTI 0x{rnti:x}: Request_{self.positive_predictions[rnti]}, "
-            f"Remaining time: {adjusted_remaining:.2f}ms, Size: {bsr_increment} bytes"
+            f"ue{sequence_number} added request {self.positive_predictions[rnti]}, "
+            f"Remaining time: {adjusted_remaining:.2f}ms"
         )
     
     def calculate_priority(self, rnti: int) -> float:
@@ -369,7 +383,8 @@ class PriorityManager:
             self.ue_last_event_time,
             self.ue_bsr_decrease_accumulation,
             self.positive_predictions,
-            self.ue_info
+            self.ue_info,
+            self.rnti_to_sequence
         ]
         
         for tracking_dict in tracking_dicts:
