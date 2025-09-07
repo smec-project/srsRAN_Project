@@ -288,7 +288,8 @@ class PriorityManager:
         
         # Convert remaining time from ms to s and calculate priority
         remaining_seconds = current_remaining / 1000.0
-        current_bsr = self.ue_latest_bsr.get(rnti, 0)
+        # current_bsr = self.ue_latest_bsr.get(rnti, 0)
+        current_bsr = 1
         
         if current_remaining < 0:
             # Use new formula when remaining_time < 0
