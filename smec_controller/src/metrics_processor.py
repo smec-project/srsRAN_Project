@@ -121,10 +121,13 @@ class MetricsProcessor:
                 self.ue_peak_buffer_size[rnti], bytes_val
             )
             
-            # self.logger.log(
-            #     f"BSR received from RNTI=0x{rnti:x}, slot={slot}, "
-            #     f"bytes={bytes_val} at {timestamp}"
-            # )
+            # Get UE index (sequence number) if available
+            # ue_index = self.priority_manager.rnti_to_sequence.get(rnti)
+            # if ue_index is not None:
+            #     self.logger.log(
+            #         f"BSR received from UE{ue_index} (RNTI=0x{rnti:x}), slot={slot}, "
+            #         f"bytes={bytes_val} at {timestamp}"
+            #     )
             
             # Add event to processor - use rnti directly as integer
             self.event_processor.add_event(rnti, "BSR", timestamp, slot, bytes=bytes_val)
