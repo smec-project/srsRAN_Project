@@ -1,6 +1,5 @@
-srsRAN Project
+srsRAN Project SMEC
 ==============
-**Based on srsRAN and Tutti's design, we want to solve the problems about the late notification to controller due to application notification mode.**
 
 [![Build Status](https://github.com/srsran/srsRAN_Project/actions/workflows/ccpp.yml/badge.svg?branch=main)](https://github.com/srsran/srsRAN_Project/actions/workflows/ccpp.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/7868/badge)](https://www.bestpractices.dev/projects/7868)
