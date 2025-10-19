@@ -15,14 +15,14 @@ cu_cp:
               - sst: 1
 
 ru_ofh:
-  t1a_max_cp_dl: 470
-  t1a_min_cp_dl: 419
-  t1a_max_cp_ul: 336
-  t1a_min_cp_ul: 285
-  t1a_max_up: 345
-  t1a_min_up: 294
-  ta4_max: 200
-  ta4_min: 0
+  t1a_max_cp_dl: 535
+  t1a_min_cp_dl: 286
+  t1a_max_cp_ul: 535
+  t1a_min_cp_ul: 286
+  t1a_max_up: 390
+  t1a_min_up: 80
+  ta4_max: 500
+  ta4_min: 25
   is_prach_cp_enabled: true            # Configures if Control-Plane messages should be used to receive PRACH messages.
   compr_method_ul: bfp                 # Uplink compression method.
   compr_bitwidth_ul: 9                 # Uplink IQ samples bitwidth after compression.
@@ -32,7 +32,7 @@ ru_ofh:
   compr_bitwidth_prach: 9              # PRACH IQ samples bitwidth after compression.
   enable_ul_static_compr_hdr: false    # Configures if the compression header is present for uplink User-Plane messages (false) or not present (true).
   enable_dl_static_compr_hdr: false    # Configures if the compression header is present for downlink User-Plane messages (false) or not present (true).
-  iq_scaling: 20                       # IQ samples scaling factor applied before compression.
+  iq_scaling: 14                      # IQ samples scaling factor applied before compression.
   cells:
     - network_interface: enp138s0f0      # Ethernet interface name used to communicate with the RU.
       ru_mac_addr: 8c:1f:64:d1:14:93   # RU MAC address.
@@ -65,6 +65,14 @@ cell_cfg:
     nof_dl_symbols: 6
     nof_ul_slots: 2
     nof_ul_symbols: 4
+  pusch:
+    dmrs_additional_position: 2 
+    # max_ue_mcs: 28  
+    # mcs_table: qam256 
+  pdsch:
+    dmrs_additional_position: 2 
+    # max_ue_mcs: 28   
+    # mcs_table: qam256
 
 log:
   filename: /tmp/gnb.log
