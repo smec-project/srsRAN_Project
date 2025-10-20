@@ -21,7 +21,7 @@ ru_ofh:
   t1a_min_cp_ul: 285
   t1a_max_up: 345
   t1a_min_up: 294
-  ta4_max: 200
+  ta4_max: 400
   ta4_min: 0
   is_prach_cp_enabled: true            # Configures if Control-Plane messages should be used to receive PRACH messages.
   compr_method_ul: bfp                 # Uplink compression method.
@@ -32,11 +32,11 @@ ru_ofh:
   compr_bitwidth_prach: 9              # PRACH IQ samples bitwidth after compression.
   enable_ul_static_compr_hdr: false    # Configures if the compression header is present for uplink User-Plane messages (false) or not present (true).
   enable_dl_static_compr_hdr: false    # Configures if the compression header is present for downlink User-Plane messages (false) or not present (true).
-  iq_scaling: 20                       # IQ samples scaling factor applied before compression.
+  iq_scaling: 18                       # IQ samples scaling factor applied before compression.
   cells:
-    - network_interface: enp138s0f0      # Ethernet interface name used to communicate with the RU.
+    - network_interface: 0000:8a:01.0      # Ethernet interface name used to communicate with the RU.
       ru_mac_addr: 8c:1f:64:d1:14:93   # RU MAC address.
-      du_mac_addr: 50:7c:6f:55:d1:06   # DU MAC address.
+      du_mac_addr: 00:33:22:33:00:11   # DU MAC address.
       vlan_tag_cp: 5                   # VLAN tag value for CP.
       vlan_tag_up: 5                   # VLAN tag value for UP.
       prach_port_id: [4, 5]            # PRACH eAxC port value.
@@ -46,7 +46,7 @@ ru_ofh:
 cell_cfg:
   dl_arfcn: 637212
   band: 78
-  channel_bandwidth_MHz: 40
+  channel_bandwidth_MHz: 100
   common_scs: 30
   plmn: "00101"
   tac: 7
@@ -65,6 +65,9 @@ cell_cfg:
     nof_dl_symbols: 6
     nof_ul_slots: 2
     nof_ul_symbols: 4
+
+hal:
+   eal_args: "--lcores (0-1)@(3-12) -a 0000:8a:01.0"
 
 log:
   filename: /tmp/gnb.log
