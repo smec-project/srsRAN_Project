@@ -32,7 +32,7 @@ ru_ofh:
   compr_bitwidth_prach: 9              # PRACH IQ samples bitwidth after compression.
   enable_ul_static_compr_hdr: false    # Configures if the compression header is present for uplink User-Plane messages (false) or not present (true).
   enable_dl_static_compr_hdr: false    # Configures if the compression header is present for downlink User-Plane messages (false) or not present (true).
-  iq_scaling: 10.5                      # IQ samples scaling factor applied before compression.
+  iq_scaling: 16                      # IQ samples scaling factor applied before compression.
   cells:
     - network_interface: 0000:8a:01.0      # Ethernet interface name used to communicate with the RU.
       ru_mac_addr: 8c:1f:64:d1:14:93   # RU MAC address.
@@ -65,12 +65,16 @@ cell_cfg:
     nof_dl_symbols: 6
     nof_ul_slots: 2
     nof_ul_symbols: 4
-  pusch:
-    olla_target_bler: 0.05
-    olla_max_snr_offset: 20 
+  # pusch:
+  #   mcs_table: qam64
+    # olla_snr_inc_step: 0
+  #   olla_target_bler: 0.05
+  #   olla_max_snr_offset: 20 
   pdsch:
-    olla_target_bler: 0.05
-    olla_max_cqi_offset: 20 
+    mcs_table: qam256
+    # olla_cqi_inc_step: 0 
+  #   olla_target_bler: 0.05
+  #   olla_max_cqi_offset: 20 
 
 hal:
    eal_args: "--lcores (0-1)@(0-20) -a 0000:8a:01.0"
