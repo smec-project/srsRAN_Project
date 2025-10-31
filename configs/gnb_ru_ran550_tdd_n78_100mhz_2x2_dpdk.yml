@@ -1,0 +1,90 @@
+# This example configuration outlines how to configure the srsRAN Project CU/DU to use an O-RU and split 7.2. This is specifically for use
+# with the Benetel RAN550 RU. This config will create a single TDD MIMO cell transmitting in band 78, with 100 MHz bandwidth and 30 kHz sub-carrier-spacing.
+# The parameters used to configure the RU are found in the `ru_ofh` sub-section. This configuration makes used of the OFH Lib from SRS to enable split 7.2.
+
+cu_cp:
+  amf:
+    addr: 127.0.0.5
+    port: 38412
+    bind_addr: 127.0.0.1
+    supported_tracking_areas:
+      - tac: 7
+        plmn_list:
+          - plmn: "00101"
+            tai_slice_support_list:
+              - sst: 1
+
+ru_ofh:
+  t1a_max_cp_dl: 535
+  t1a_min_cp_dl: 286
+  t1a_max_cp_ul: 535
+  t1a_min_cp_ul: 286
+  t1a_max_up: 390
+  t1a_min_up: 80
+  ta4_max: 500
+  ta4_min: 25
+  is_prach_cp_enabled: true            # Configures if Control-Plane messages should be used to receive PRACH messages.
+  compr_method_ul: bfp                 # Uplink compression method.
+  compr_bitwidth_ul: 9                 # Uplink IQ samples bitwidth after compression.
+  compr_method_dl: bfp                 # Downlink compression method.
+  compr_bitwidth_dl: 9                 # Downlink IQ samples bitwidth after compression.
+  compr_method_prach: bfp              # PRACH compression method.
+  compr_bitwidth_prach: 9              # PRACH IQ samples bitwidth after compression.
+  enable_ul_static_compr_hdr: false    # Configures if the compression header is present for uplink User-Plane messages (false) or not present (true).
+  enable_dl_static_compr_hdr: false    # Configures if the compression header is present for downlink User-Plane messages (false) or not present (true).
+  iq_scaling: 12                       # IQ samples scaling factor applied before compression.
+  cells:
+    - network_interface: 0000:8a:01.0      # Ethernet interface name used to communicate with the RU.
+      ru_mac_addr: 8c:1f:64:d1:14:93   # RU MAC address.
+      du_mac_addr: 00:33:22:33:00:11   # DU MAC address.
+      vlan_tag_cp: 5                   # VLAN tag value for CP.
+      vlan_tag_up: 5                   # VLAN tag value for UP.
+      prach_port_id: [8, 9]            # PRACH eAxC port value.
+      dl_port_id: [0, 1]         # Downlink eAxC port values.
+      ul_port_id: [0, 1]               # Uplink eAxC port values.
+
+cell_cfg:
+  dl_arfcn: 637212
+  band: 78
+  channel_bandwidth_MHz: 100
+  common_scs: 30
+  plmn: "00101"
+  tac: 7
+  pci: 1
+  nof_antennas_dl: 2
+  nof_antennas_ul: 2
+  prach:
+    prach_config_index: 159
+    prach_root_sequence_index: 1
+    zero_correlation_zone: 0
+  ssb:
+    ssb_block_power_dbm: -11
+  tdd_ul_dl_cfg:
+    dl_ul_tx_period: 10
+    nof_dl_slots: 7
+    nof_dl_symbols: 6
+    nof_ul_slots: 2
+    nof_ul_symbols: 4
+  # pusch:
+  #   mcs_table: qam64
+    # olla_snr_inc_step: 0
+  #   olla_target_bler: 0.05
+  #   olla_max_snr_offset: 20 
+  pdsch:
+    mcs_table: qam256
+    # olla_cqi_inc_step: 0 
+  #   olla_target_bler: 0.05
+  #   olla_max_cqi_offset: 20 
+
+hal:
+   eal_args: "--lcores (0-1)@(0-20) -a 0000:8a:01.0"
+
+log:
+  filename: /tmp/gnb.log
+  all_level: warning
+
+pcap:
+  mac_enable: false
+  mac_filename: /tmp/gnb_mac.pcap
+  ngap_enable: false
+  ngap_filename: /tmp/gnb_ngap.pcap
