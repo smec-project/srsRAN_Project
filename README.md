@@ -1,4 +1,4 @@
-srsRAN Project SMEC
+srsRAN Project with SMEC
 ==============
 
 [![Build Status](https://github.com/srsran/srsRAN_Project/actions/workflows/ccpp.yml/badge.svg?branch=main)](https://github.com/srsran/srsRAN_Project/actions/workflows/ccpp.yml)
@@ -15,6 +15,15 @@ Build instructions and user guides - [srsRAN Project documentation](https://docs
 Community announcements and support - [Discussion board](https://www.github.com/srsran/srsran_project/discussions).
 
 Features and roadmap - [Features](https://docs.srsran.com/projects/project/en/latest/general/source/2_features_and_roadmap.html).
+
+Controllers
+-----------
+
+This repo also includes a few **Python controllers** used to ingest application/SLO signals and RAN metrics, then send **priority updates** back to the scheduler.
+
+- **`smec_controller/`**: SMEC controller for low-latency SLO-aware scheduling based on 5G control signals.
+- **`tutti_controller/`**: Tutti controller that adjusts priority per UE relying on notifications from applications deployed on edge server.
+- **`arma_controller/`**: Similar to Tutti, but uses a different priority strategy.
 
 Build Preparation
 -----------------
