@@ -9,9 +9,8 @@ from .utils import Logger
 
 class EventProcessor:
     """Handles event processing, windowing, and slot normalization.
-    
-    Manages sliding windows of events for each UE and provides
-    feature extraction capabilities for machine learning inference.
+
+    Manages sliding windows of events for each UE.
     """
     
     def __init__(self, window_size: int, logger: Logger):
@@ -176,95 +175,7 @@ class EventProcessor:
             return True
         
         return False
-    
-    def extract_window_features(self, rnti: int) -> Optional[np.ndarray]:
-        """Extract features for machine learning inference.
-        
-        Args:
-            rnti: Radio Network Temporary Identifier as integer.
-            
-        Returns:
-            Feature array for ML model or None if insufficient data.
-        """
-        if rnti not in self.window_events:
-            return None
-        
-        events = self.window_events[rnti]
-        bsr_indices = self.get_bsr_indices(rnti)
-        
-        if len(bsr_indices) < 2:
-            return None
-        
-        all_features = []
-        
-        # Get the last BSR's slot as the search end slot
-        final_bsr_slot = events[bsr_indices[-1]][4]
 
-        # Process each BSR interval in the window
-        for i in range(len(bsr_indices) - 1):
-            current_start_idx = bsr_indices[i]
-            current_end_idx = bsr_indices[i + 1]
-
-            start_bsr = events[current_start_idx]
-            end_bsr = events[current_end_idx]
-
-            # Find first PRB after start_bsr but before final_bsr
-            first_prb_slot = final_bsr_slot  # Default to final BSR slot if no PRB found
-            search_idx = current_start_idx + 1
-            while search_idx < len(events):
-                if events[search_idx][0] == EventTypes.PRB:
-                    first_prb_slot = events[search_idx][4]
-                    break
-                if events[search_idx][4] > final_bsr_slot:
-                    break
-                search_idx += 1
-
-            # Calculate slot difference until first PRB
-            slots_until_prb = first_prb_slot - start_bsr[4]
-
-            # Calculate other features
-            bsr_diff = end_bsr[1] - start_bsr[1]
-            end_bsr_value = end_bsr[1]
-
-            total_prbs = 0
-            sr_count = 0
-            prb_events = 0
-
-            for event in events[current_start_idx + 1:current_end_idx]:
-                if event[0] == EventTypes.PRB:
-                    total_prbs += event[2]
-                    prb_events += 1
-                elif event[0] == EventTypes.SR:
-                    sr_count += 1
-
-            # Calculate window duration in slots
-            window_slots = end_bsr[4] - start_bsr[4]
-
-            # Calculate BSR per PRB (avoid division by zero)
-            bsr_per_prb = bsr_diff / (total_prbs + 1e-6)
-
-            # Calculate rates using slots
-            window_duration_ms = window_slots * 0.5  # Assuming each slot is 0.5ms
-            bsr_update_rate = 1000.0 / (window_duration_ms + 1e-6)
-            sr_rate = sr_count * 1000.0 / (window_duration_ms + 1e-6)
-
-            # Features in the same order as training
-            interval_features = np.array([
-                bsr_diff,  # Difference between BSRs
-                total_prbs,  # Total PRBs allocated
-                sr_count,  # Number of SR events
-                end_bsr_value,  # Value of the end BSR
-                bsr_per_prb,  # BSR difference normalized by PRBs
-                window_slots,  # Time duration in slots
-                bsr_update_rate,  # Rate of BSR updates
-                sr_rate,  # Rate of SR events
-                slots_until_prb,  # Slots until first PRB after BSR
-            ])
-
-            all_features.append(interval_features)
-
-        return np.concatenate(all_features)
-    
     def print_window_data(self, rnti: int) -> None:
         """Print all events in the current window for debugging.
         

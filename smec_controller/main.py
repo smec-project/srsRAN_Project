@@ -28,24 +28,6 @@ def main():
         help="Size of the window for analysis (default: 5)",
     )
     parser.add_argument(
-        "--model-path",
-        type=str,
-        default="decision_tree/models/bsr_only_xgboost.joblib",
-        help=(
-            "Path to the trained model for inference (default: "
-            "decision_tree/models/bsr_only_xgboost.joblib)"
-        ),
-    )
-    parser.add_argument(
-        "--scaler-path",
-        type=str,
-        default="decision_tree/models/bsr_only_scaler.joblib",
-        help=(
-            "Path to the scaler for the model (default: "
-            "decision_tree/models/bsr_only_scaler.joblib)"
-        ),
-    )
-    parser.add_argument(
         "--slo-ctrl-port",
         type=int,
         default=5557,
@@ -87,8 +69,6 @@ def main():
         ran_control_port=args.ran_control_port,
         enable_logging=args.log,
         window_size=args.window_size,
-        model_path=args.model_path,
-        scaler_path=args.scaler_path,
         collect_logs_only=args.collect_logs,
     )
 

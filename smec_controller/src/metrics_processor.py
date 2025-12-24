@@ -9,7 +9,6 @@ from .config import EventTypes
 from .utils import Logger, get_current_timestamp
 from .event_processor import EventProcessor
 from .priority_manager import PriorityManager
-from .model_inference import ModelInference
 
 
 class MetricsProcessor:
@@ -23,20 +22,17 @@ class MetricsProcessor:
         self,
         event_processor: EventProcessor,
         priority_manager: PriorityManager,
-        model_inference: ModelInference,
         logger: Logger
     ):
         """Initialize the metrics processor.
-        
+
         Args:
             event_processor: Event processor instance.
             priority_manager: Priority manager instance.
-            model_inference: Model inference instance.
             logger: Logger instance for debugging output.
         """
         self.event_processor = event_processor
         self.priority_manager = priority_manager
-        self.model_inference = model_inference
         self.logger = logger
         
         # Track BSR events for FIFO queue management - using int RNTI as keys
@@ -185,28 +181,12 @@ class MetricsProcessor:
             
             # Check if latest BSR bytes increased
             bsr_increased = latest_bsr[1] > prev_bsr[1]
-            
-            # Perform model inference if available
-            if self.model_inference.is_loaded:
-                features = self.event_processor.extract_window_features(rnti)
-                if features is not None:
-                    final_prediction, bsr_inc, model_pred = (
-                        self.model_inference.predict_with_bsr_fallback(
-                            features, latest_bsr[1], prev_bsr[1]
-                        )
-                    )
-                    
-                    # Process prediction result
-                    self._process_prediction_result(
-                        rnti, final_prediction, bsr_inc, model_pred, 
-                        latest_bsr, prev_bsr, bsr_indices
-                    )
-            else:
-                # Fallback to BSR increase only
-                self._process_prediction_result(
-                    rnti, bsr_increased, bsr_increased, None,
-                    latest_bsr, prev_bsr, bsr_indices
-                )
+
+            # Use BSR increase detection
+            self._process_prediction_result(
+                rnti, bsr_increased, bsr_increased, None,
+                latest_bsr, prev_bsr, bsr_indices
+            )
                 
         except Exception as e:
             self.logger.log(f"Error in BSR window update for RNTI 0x{rnti:x}: {e}")

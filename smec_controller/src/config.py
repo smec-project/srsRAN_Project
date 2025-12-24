@@ -1,13 +1,12 @@
 """Configuration constants and settings for SMEC Controller."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class ControllerConfig:
     """Configuration settings for the SMEC Controller.
-    
+
     Attributes:
         slo_ctrl_port: Port to receive SLO control plane messages from users.
         ran_metrics_ip: IP address for RAN metrics connection.
@@ -16,8 +15,6 @@ class ControllerConfig:
         ran_control_port: Port for RAN control connection.
         enable_logging: Whether to enable file logging.
         window_size: Size of the sliding window for analysis.
-        model_path: Path to the trained ML model file.
-        scaler_path: Path to the scaler file for model preprocessing.
         min_ddl: Minimum deadline value in milliseconds.
         priority_update_interval: Interval for priority updates in seconds.
         slot_duration_ms: Duration of each slot in milliseconds.
@@ -30,8 +27,6 @@ class ControllerConfig:
     ran_control_port: int = 5555
     enable_logging: bool = False
     window_size: int = 5
-    model_path: Optional[str] = None
-    scaler_path: Optional[str] = None
     min_ddl: float = 0.1
     priority_update_interval: float = 0.002
     slot_duration_ms: float = 0.5
@@ -71,7 +66,5 @@ class MessageTypes:
 
 # Default file paths
 class DefaultPaths:
-    """Default file paths for model and data files."""
-    MODEL_PATH = "decision_tree/models/bsr_only_xgboost.joblib"
-    SCALER_PATH = "decision_tree/models/bsr_only_scaler.joblib"
+    """Default file paths for data files."""
     LOG_FILE = "controller.log" 

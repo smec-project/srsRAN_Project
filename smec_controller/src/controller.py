@@ -7,7 +7,6 @@ from typing import Dict, Optional, List, Any
 from .config import ControllerConfig, DefaultPaths
 from .utils import Logger
 from .event_processor import EventProcessor
-from .model_inference import ModelInference
 from .priority_manager import PriorityManager
 from .metrics_processor import MetricsProcessor
 from .network_handler import NetworkHandler
@@ -16,9 +15,9 @@ from .debug_receiver import DebugReceiver
 
 class SmecController:
     """Main SMEC Controller class.
-    
+
     Orchestrates all components including network handling, event processing,
-    model inference, priority management, and metrics processing for
+    priority management, and metrics processing for
     5G RAN PETS (Predictive Edge Traffic Scheduling).
     """
     
@@ -38,14 +37,12 @@ class SmecController:
         
         # Initialize components
         self.event_processor = EventProcessor(self.config.window_size, self.logger)
-        self.model_inference = ModelInference(self.logger)
         self.priority_manager = PriorityManager(self.config, self.logger)
-        
+
         # Initialize metrics processor with component dependencies
         self.metrics_processor = MetricsProcessor(
             self.event_processor,
             self.priority_manager,
-            self.model_inference,
             self.logger
         )
         
@@ -69,28 +66,7 @@ class SmecController:
         self.priority_update_thread: Optional[threading.Thread] = None
         
         self.logger.log("SMEC Controller initialized")
-    
-    def load_model(self, model_path: Optional[str] = None, scaler_path: Optional[str] = None) -> bool:
-        """Load machine learning model and scaler.
-        
-        Args:
-            model_path: Path to the model file. Uses config default if None.
-            scaler_path: Path to the scaler file. Uses config default if None.
-            
-        Returns:
-            True if model was loaded successfully.
-        """
-        model_path = model_path or self.config.model_path or DefaultPaths.MODEL_PATH
-        scaler_path = scaler_path or self.config.scaler_path or DefaultPaths.SCALER_PATH
-        
-        success = self.model_inference.load_model(model_path, scaler_path)
-        
-        if success:
-            model_info = self.model_inference.get_model_info()
-            self.logger.log(f"Model loaded: {model_info}")
-        
-        return success
-    
+
     def start(self) -> bool:
         """Start the SMEC Controller and all its components.
         
@@ -99,12 +75,7 @@ class SmecController:
         """
         try:
             self.logger.log("Starting SMEC Controller...")
-            
-            # Load model if paths are configured and not in logs-only mode
-            if (self.config.model_path and self.config.scaler_path and 
-                not self.config.collect_logs_only):
-                self.load_model()
-            
+
             # Start networking
             if not self.network_handler.start_networking():
                 self.logger.log("Failed to start network handler")
@@ -215,7 +186,6 @@ class SmecController:
                 "collect_logs_only": self.config.collect_logs_only,
             },
             "network": self.network_handler.get_connection_status(),
-            "model": self.model_inference.get_model_info(),
             "registered_ues": len(self.priority_manager.ue_info),
             "active_priorities": len([
                 rnti for rnti, priority in self.priority_manager.ue_priorities.items()
