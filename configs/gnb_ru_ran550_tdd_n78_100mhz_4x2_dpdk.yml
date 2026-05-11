@@ -65,16 +65,19 @@ cell_cfg:
     nof_dl_symbols: 6
     nof_ul_slots: 2
     nof_ul_symbols: 4
-  # pusch:
-  #   mcs_table: qam64
+  pusch:
+    # default -76; lower => UE TX power lower (each -2 dB step)
+    # Use -94 for PI to work, phone and amari can work well under default -76
+    p0_nominal_with_grant: -94
+    # mcs_table: qam64
     # olla_snr_inc_step: 0
-  #   olla_target_bler: 0.05
-  #   olla_max_snr_offset: 20 
+    # olla_target_bler: 0.05
+    # olla_max_snr_offset: 20 
   pdsch:
     mcs_table: qam256
     # olla_cqi_inc_step: 0 
-  #   olla_target_bler: 0.05
-  #   olla_max_cqi_offset: 20 
+    # olla_target_bler: 0.05
+    # olla_max_cqi_offset: 20 
 
 hal:
    eal_args: "--lcores (0-1)@(0-20) -a 0000:8a:01.0"
