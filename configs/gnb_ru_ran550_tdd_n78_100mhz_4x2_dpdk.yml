@@ -40,7 +40,7 @@ ru_ofh:
       vlan_tag_cp: 5                   # VLAN tag value for CP.
       vlan_tag_up: 5                   # VLAN tag value for UP.
       prach_port_id: [4, 5]            # PRACH eAxC port value.
-      dl_port_id: [1, 0, 2, 3]         # Downlink eAxC port values.
+      dl_port_id: [0, 1, 2, 3]         # Downlink eAxC port values.
       ul_port_id: [0, 1]               # Uplink eAxC port values.
 
 cell_cfg:
