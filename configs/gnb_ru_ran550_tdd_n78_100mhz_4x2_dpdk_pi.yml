@@ -69,7 +69,7 @@ cell_cfg:
     # default -76; lower => UE TX power lower (each -2 dB step)
     # Use -94 for PI to work, phone and amari can work well under default -76
     # amarisoft can not achieve best performance under -94
-    # p0_nominal_with_grant: -94
+    p0_nominal_with_grant: -94
     # mcs_table: qam64
     # olla_snr_inc_step: 0
     # olla_target_bler: 0.05
