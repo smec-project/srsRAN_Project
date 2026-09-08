@@ -32,7 +32,7 @@ ru_ofh:
   compr_bitwidth_prach: 9              # PRACH IQ samples bitwidth after compression.
   enable_ul_static_compr_hdr: false    # Configures if the compression header is present for uplink User-Plane messages (false) or not present (true).
   enable_dl_static_compr_hdr: false    # Configures if the compression header is present for downlink User-Plane messages (false) or not present (true).
-  iq_scaling: 14                       # IQ samples scaling factor applied before compression.
+  iq_scaling: 10                       # IQ samples scaling factor applied before compression.
   cells:
     - network_interface: 0000:8a:11.0     # Ethernet interface name used to communicate with the RU.
       ru_mac_addr: 8c:1f:64:d1:14:93   # RU MAC address.
@@ -40,7 +40,7 @@ ru_ofh:
       vlan_tag_cp: 5                   # VLAN tag value for CP.
       vlan_tag_up: 5                   # VLAN tag value for UP.
       prach_port_id: [4, 5]            # PRACH eAxC port value.
-      dl_port_id: [0, 1, 2, 3]         # Downlink eAxC port values.
+      dl_port_id: [1, 0, 2, 3]         # Downlink eAxC port values.
       ul_port_id: [0, 1]               # Uplink eAxC port values.
 
 cell_cfg:
@@ -76,9 +76,15 @@ cell_cfg:
     # olla_max_snr_offset: 20 
   pdsch:
     mcs_table: qam256
+    harq_la_cqi_drop_threshold: 0      # Disable CQI-drop early HARQ cancellation; user trial 2026-09-08.
+    harq_la_ri_drop_threshold: 0       # Preserve pending HARQ across RI drops; tail diagnostic 2026-09-07.
     # olla_cqi_inc_step: 0 
     # olla_target_bler: 0.05
-    # olla_max_cqi_offset: 20 
+    # olla_max_cqi_offset: 20
+  sched_expert_cfg:
+    policy_sched_cfg:
+      pf_sched:
+        pf_sched_fairness_coeff: 2.0
 
 hal:
    eal_args: "--lcores (0-1)@(0-20) -a 0000:8a:11.0"
